@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fixed HLS Player</title>
+    <title>HLS Tester</title>
+    
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <link href="https://unpkg.com/@videojs/themes@1/dist/city/index.css" rel="stylesheet" />
+
     <style>
         body {
             background-color: #121212;
@@ -17,70 +21,115 @@
             margin: 0;
             padding: 20px;
         }
+        .controls-container {
+            width: 100%;
+            max-width: 1024px;
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border: 1px solid #333;
+            background-color: #1e1e1e;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+        }
+        input[type="text"]:focus {
+            border-color: #6200ea;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: #6200ea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #7c4dff;
+        }
         .video-container {
             width: 100%;
             max-width: 1024px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
             border-radius: 8px;
             overflow: hidden;
-            background: #000;
+            background-color: #000;
         }
-        video {
-            width: 100%;
-            height: auto;
-            display: block;
+        h1 {
+            margin-bottom: 20px;
+            text-align: center;
         }
-        h1 { margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
 
-    <h1>Stream Player</h1>
+    <h1>HLS Stream Tester</h1>
+
+    <div class="controls-container">
+        <input type="text" id="hls-input" placeholder="Paste HuggingFace master.m3u8 link here..." />
+        <button id="load-btn">Go</button>
+    </div>
 
     <div class="video-container">
-        <video id="video" controls crossorigin="anonymous">
-            <track kind="captions" src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/subs_2_eng.vtt" srclang="en" label="English" default>
-            <track kind="captions" src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/subs_3_eng.vtt" srclang="en" label="English (SDH)">
+        <video
+            id="my-video"
+            class="video-js vjs-big-play-centered vjs-theme-city"
+            controls
+            preload="auto"
+            fluid="true"
+            crossorigin="anonymous"
+            data-setup='{}'
+        >
+            <p class="vjs-no-js">
+                To view this video please enable JavaScript, and consider upgrading to a web browser that
+                <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+            </p>
         </video>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
     
     <script>
-        async function initPlayer() {
-            const video = document.getElementById('video');
-            const masterUrl = 'https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/master.m3u8';
+        // Initialize Video.js after the DOM loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const player = videojs('my-video');
+            const inputField = document.getElementById('hls-input');
+            const loadButton = document.getElementById('load-btn');
 
-            try {
-                // 1. Fetch the original, broken manifest from Hugging Face
-                const response = await fetch(masterUrl);
-                let manifestText = await response.text();
-
-                // 2. Clean the manifest: Remove the invalid HLS subtitle bindings
-                manifestText = manifestText.replace(/,SUBTITLES="group_subs"/g, "");
-                manifestText = manifestText.split('\n').filter(line => !line.startsWith('#EXT-X-MEDIA:TYPE=SUBTITLES')).join('\n');
-
-                // 3. Create a temporary, clean manifest URL in the browser's memory
-                const blob = new Blob([manifestText], { type: 'application/x-mpegURL' });
-                const cleanManifestUrl = URL.createObjectURL(blob);
-
-                // 4. Load the clean stream into the video player
-                if (Hls.isSupported()) {
-                    const hls = new Hls();
-                    hls.loadSource(cleanManifestUrl);
-                    hls.attachMedia(video);
-                } 
-                // Fallback for Safari (which handles HLS natively)
-                else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = cleanManifestUrl;
+            function loadStream() {
+                const url = inputField.value.trim();
+                
+                if (url) {
+                    // Update the player's source dynamically
+                    player.src({
+                        src: url,
+                        type: 'application/x-mpegURL'
+                    });
+                    
+                    // Optional: Autoplay when a new link is loaded
+                    player.play().catch(e => console.log("Autoplay prevented:", e));
                 }
-            } catch (error) {
-                console.error("Failed to intercept and clean the manifest:", error);
             }
-        }
 
-        // Start the process
-        initPlayer();
+            // Trigger load when clicking "Go"
+            loadButton.addEventListener('click', loadStream);
+
+            // Trigger load when pressing Enter in the input field
+            inputField.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    loadStream();
+                }
+            });
+        });
     </script>
+    
 </body>
 </html>
