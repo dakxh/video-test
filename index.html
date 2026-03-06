@@ -107,7 +107,24 @@
             }
 
             if (Hls.isSupported()) {
-                currentHls = new Hls();
+                currentHls = new Hls({
+                    // 1. Network & Timeout Forgiveness (Crucial for HF CDN Redirects)
+                    fragLoadingTimeOut: 60000,       // Wait up to 60 seconds for a chunk
+                    manifestLoadingTimeOut: 60000,
+                    fragLoadingMaxRetry: 10,         // Retry 10 times before giving up
+                    fragLoadingRetryDelay: 500,
+                    
+                    // 2. Buffer Aggressiveness (Keep memory usage safe but buffer deep)
+                    maxBufferLength: 60,             // Buffer 60 seconds ahead
+                    maxMaxBufferLength: 120,         // Maximum buffer allowed
+                    maxBufferSize: 60 * 1000 * 1000, // Up to 60MB of RAM for the buffer
+                    
+                    // 3. Seeking & Keyframe Forgiveness (Crucial for -c:v copy)
+                    maxFragLookUpTolerance: 0.5,     // Allow slight desyncs in keyframes
+                    enableWorker: true,              // Use Web Workers to prevent UI freezing
+                    lowLatencyMode: false            // We are VOD, not Twitch. Disable this.
+                });
+                
                 currentHls.loadSource(manifestUrl);
                 currentHls.attachMedia(videoElement);
                 currentHls.on(Hls.Events.MANIFEST_PARSED, function () {
