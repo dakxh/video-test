@@ -3,12 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS Player</title>
-    
-    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-    
-    <link href="https://unpkg.com/@videojs/themes@1/dist/city/index.css" rel="stylesheet" />
-
+    <title>Fixed HLS Player</title>
     <style>
         body {
             background-color: #121212;
@@ -28,11 +23,14 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
             border-radius: 8px;
             overflow: hidden;
+            background: #000;
         }
-        h1 {
-            margin-bottom: 20px;
-            text-align: center;
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
         }
+        h1 { margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
@@ -40,28 +38,49 @@
     <h1>Stream Player</h1>
 
     <div class="video-container">
-        <video
-            id="my-video"
-            class="video-js vjs-big-play-centered vjs-theme-city"
-            controls
-            preload="auto"
-            fluid="true"
-            crossorigin="anonymous"
-            data-setup='{}'
-        >
-            <source src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/master.m3u8" type="application/x-mpegURL" />
-            
+        <video id="video" controls crossorigin="anonymous">
             <track kind="captions" src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/subs_2_eng.vtt" srclang="en" label="English" default>
             <track kind="captions" src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/subs_3_eng.vtt" srclang="en" label="English (SDH)">
-            
-            <p class="vjs-no-js">
-                To view this video please enable JavaScript, and consider upgrading to a web browser that
-                <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
-            </p>
         </video>
     </div>
 
-    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     
+    <script>
+        async function initPlayer() {
+            const video = document.getElementById('video');
+            const masterUrl = 'https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/master.m3u8';
+
+            try {
+                // 1. Fetch the original, broken manifest from Hugging Face
+                const response = await fetch(masterUrl);
+                let manifestText = await response.text();
+
+                // 2. Clean the manifest: Remove the invalid HLS subtitle bindings
+                manifestText = manifestText.replace(/,SUBTITLES="group_subs"/g, "");
+                manifestText = manifestText.split('\n').filter(line => !line.startsWith('#EXT-X-MEDIA:TYPE=SUBTITLES')).join('\n');
+
+                // 3. Create a temporary, clean manifest URL in the browser's memory
+                const blob = new Blob([manifestText], { type: 'application/x-mpegURL' });
+                const cleanManifestUrl = URL.createObjectURL(blob);
+
+                // 4. Load the clean stream into the video player
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(cleanManifestUrl);
+                    hls.attachMedia(video);
+                } 
+                // Fallback for Safari (which handles HLS natively)
+                else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = cleanManifestUrl;
+                }
+            } catch (error) {
+                console.error("Failed to intercept and clean the manifest:", error);
+            }
+        }
+
+        // Start the process
+        initPlayer();
+    </script>
 </body>
 </html>
