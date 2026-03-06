@@ -3,271 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lazarus Prototype Player</title>
+    <title>HLS Player</title>
     
-    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     
+    <link href="https://unpkg.com/@videojs/themes@1/dist/city/index.css" rel="stylesheet" />
+
     <style>
         body {
-            background-color: #000000;
-            color: #EDEDED;
-            font-family: system-ui, -apple-system, sans-serif;
-            margin: 0;
-            padding: 2rem;
+            background-color: #121212;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
         }
-        .container {
-            width: 100%;
-            max-width: 1000px;
-        }
-        
-        /* Custom Track Controls Box */
-        .track-controls {
-            display: flex;
-            gap: 1.5rem;
-            background: #1A1A1A;
-            padding: 1rem;
-            border-radius: 8px 8px 0 0;
-            border: 1px solid #333;
-            border-bottom: none;
-            justify-content: flex-end;
-            display: none; /* Hidden until video loads */
-        }
-        .track-controls label {
-            font-size: 0.85rem; 
-            color: #888; 
-            margin-right: 0.5rem;
-            font-weight: bold;
-        }
-        .track-controls select {
-            background: #000;
-            color: #fff;
-            border: 1px solid #444;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            outline: none;
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .track-controls select:hover {
-            border-color: #666;
-        }
-        
         .video-container {
-            margin-bottom: 2rem;
-            border-radius: 0 0 8px 8px;
+            width: 100%;
+            max-width: 1024px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
             overflow: hidden;
-            background: #111;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-            border: 1px solid #333;
         }
-        h2 {
-            font-weight: 500;
-            border-bottom: 1px solid #333;
-            padding-bottom: 0.5rem;
-        }
-        #catalog-list {
-            list-style: none;
-            padding: 0;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 1rem;
-        }
-        .catalog-item {
-            background: #1A1A1A;
-            padding: 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.2s;
-            border: 1px solid #222;
-        }
-        .catalog-item:hover {
-            background: #2A2A2A;
-            transform: scale(1.02);
-        }
-        .item-title {
-            font-weight: bold;
-            font-size: 1.1rem;
-            margin-bottom: 0.25rem;
-        }
-        .item-meta {
-            font-size: 0.85rem;
-            color: #888;
-        }
-        #loading {
-            color: #888;
-            font-style: italic;
+        h1 {
+            margin-bottom: 20px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        
-        <div class="track-controls" id="track-controls">
-            <div>
-                <label for="audio-select">Audio:</label>
-                <select id="audio-select"><option value="-1">Loading...</option></select>
-            </div>
-            <div>
-                <label for="sub-select">Subtitles:</label>
-                <select id="sub-select"><option value="-1">Loading...</option></select>
-            </div>
-        </div>
+    <h1>Stream Player</h1>
 
-        <div class="video-container">
-            <video id="player" controls crossorigin playsinline></video>
-        </div>
-
-        <h2>Available Media</h2>
-        <div id="loading">Scanning Hugging Face CDN...</div>
-        <ul id="catalog-list"></ul>
+    <div class="video-container">
+        <video
+            id="my-video"
+            class="video-js vjs-big-play-centered vjs-theme-city"
+            controls
+            preload="auto"
+            fluid="true"
+            crossorigin="anonymous"
+            data-setup='{}'
+        >
+            <source src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/master.m3u8" type="application/x-mpegURL" />
+            
+            <track kind="captions" src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/subs_2_eng.vtt" srclang="en" label="English" default>
+            <track kind="captions" src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Deadpool.And.Wolverine.2024.2160p/subs_3_eng.vtt" srclang="en" label="English (SDH)">
+            
+            <p class="vjs-no-js">
+                To view this video please enable JavaScript, and consider upgrading to a web browser that
+                <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+            </p>
+        </video>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
-
-    <script>
-        const REPO = 'Gravatar44/record';
-        const videoElement = document.getElementById('player');
-        const listContainer = document.getElementById('catalog-list');
-        const loadingIndicator = document.getElementById('loading');
-        
-        const trackControls = document.getElementById('track-controls');
-        const audioSelect = document.getElementById('audio-select');
-        const subSelect = document.getElementById('sub-select');
-        
-        let currentHls = null;
-        let plyrInstance = null;
-
-        function initPlayer() {
-            // STRICT PLYR CONFIG: Completely remove 'captions' from the settings menu so it stops interfering with HLS.js
-            plyrInstance = new Plyr(videoElement, {
-                settings: ['quality', 'speed', 'loop'] 
-            });
-        }
-
-        function playVideo(manifestUrl, title) {
-            if (currentHls) {
-                currentHls.destroy();
-            }
-
-            if (Hls.isSupported()) {
-                currentHls = new Hls({
-                    fragLoadingTimeOut: 60000,
-                    manifestLoadingTimeOut: 60000,
-                    fragLoadingMaxRetry: 10,
-                    fragLoadingRetryDelay: 500,
-                    maxBufferLength: 60,
-                    maxMaxBufferLength: 120,
-                    maxBufferSize: 60 * 1000 * 1000,
-                    maxFragLookUpTolerance: 0.5,
-                    enableWorker: true,
-                    lowLatencyMode: false,
-                    renderTextTracksNatively: true 
-                });
-                
-                currentHls.loadSource(manifestUrl);
-                currentHls.attachMedia(videoElement);
-                
-                currentHls.on(Hls.Events.MANIFEST_PARSED, function () {
-                    videoElement.play();
-                    trackControls.style.display = 'flex';
-                });
-
-                // ASYNC TRACK LOADING: Wait for HLS.js to actually find the audio streams
-                currentHls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function (event, data) {
-                    audioSelect.innerHTML = '';
-                    if (data.audioTracks && data.audioTracks.length > 0) {
-                        data.audioTracks.forEach((track, index) => {
-                            const option = document.createElement('option');
-                            option.value = index;
-                            option.textContent = track.name || `Audio Track ${index + 1}`;
-                            audioSelect.appendChild(option);
-                        });
-                        audioSelect.value = currentHls.audioTrack;
-                    } else {
-                        audioSelect.innerHTML = '<option value="-1">Default (Stereo)</option>';
-                    }
-                });
-
-                // ASYNC TRACK LOADING: Wait for HLS.js to actually find the VTT chunks
-                currentHls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function (event, data) {
-                    subSelect.innerHTML = '<option value="-1">Off</option>';
-                    if (data.subtitleTracks && data.subtitleTracks.length > 0) {
-                        data.subtitleTracks.forEach((track, index) => {
-                            const option = document.createElement('option');
-                            option.value = index;
-                            // Clean up the names visually
-                            option.textContent = (track.name || `Subtitle ${index + 1}`).toUpperCase();
-                            subSelect.appendChild(option);
-                        });
-                        subSelect.value = currentHls.subtitleTrack;
-                    }
-                });
-
-            } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-                videoElement.src = manifestUrl;
-                videoElement.addEventListener('loadedmetadata', function () {
-                    videoElement.play();
-                });
-                // Safari Native UI handles its own tracks
-                trackControls.style.display = 'none';
-            }
-            
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-            console.log("Playing:", title);
-        }
-
-        // Bridge HTML Dropdowns directly to the HLS Engine
-        audioSelect.addEventListener('change', (e) => {
-            if(currentHls) currentHls.audioTrack = parseInt(e.target.value);
-        });
-
-        subSelect.addEventListener('change', (e) => {
-            if(currentHls) currentHls.subtitleTrack = parseInt(e.target.value);
-        });
-
-        async function loadCatalog() {
-            try {
-                const treeRes = await fetch(`https://huggingface.co/api/datasets/${REPO}/tree/main?recursive=true`);
-                const tree = await treeRes.json();
-                const metadataFiles = tree.filter(f => f.path.endsWith('metadata.json'));
-                loadingIndicator.style.display = 'none';
-
-                for (const file of metadataFiles) {
-                    const metaRes = await fetch(`https://huggingface.co/datasets/${REPO}/raw/main/${file.path}`);
-                    const data = await metaRes.json();
-
-                    if (data.hls_manifest_url) {
-                        const li = document.createElement('li');
-                        li.className = 'catalog-item';
-                        
-                        let displayTitle = data.title;
-                        if (file.path.includes('/Season')) {
-                            const showName = file.path.split('/')[0].replace(/\./g, ' ');
-                            displayTitle = `${showName} - ${data.title}`;
-                        }
-
-                        li.innerHTML = `
-                            <div class="item-title">${displayTitle}</div>
-                            <div class="item-meta">${data.quality || 'HD'} • ${data.size || ''}</div>
-                        `;
-                        
-                        li.onclick = () => playVideo(data.hls_manifest_url, displayTitle);
-                        listContainer.appendChild(li);
-                    }
-                }
-            } catch (error) {
-                console.error("Error fetching catalog:", error);
-                loadingIndicator.textContent = "Failed to load catalog. Check console.";
-            }
-        }
-
-        initPlayer();
-        loadCatalog();
-    </script>
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    
 </body>
 </html>
