@@ -3,11 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Avengers: Endgame - Stream</title>
+    <title>HLS.js Tester</title>
     
-    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
-    <link href="https://unpkg.com/@videojs/themes@1/dist/city/index.css" rel="stylesheet" />
-
     <style>
         body {
             background-color: #121212;
@@ -21,6 +18,34 @@
             margin: 0;
             padding: 20px;
         }
+        .controls-container {
+            width: 100%;
+            max-width: 1024px;
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border: 1px solid #333;
+            background-color: #1e1e1e;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: #6200ea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background-color: #7c4dff; }
         .video-container {
             width: 100%;
             max-width: 1024px;
@@ -29,36 +54,93 @@
             overflow: hidden;
             background-color: #000;
         }
-        h1 {
-            margin-bottom: 20px;
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #error-log {
+            color: #ff5252;
+            margin-top: 15px;
+            font-family: monospace;
             text-align: center;
         }
     </style>
 </head>
 <body>
 
-    <h1>Avengers: Endgame (2160p)</h1>
+    <h1>Stream Tester (HLS.js)</h1>
 
-    <div class="video-container">
-        <video
-            id="my-video"
-            class="video-js vjs-big-play-centered vjs-theme-city"
-            controls
-            preload="auto"
-            fluid="true"
-            crossorigin="anonymous"
-            data-setup='{}'
-        >
-            <source src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Marvel.Studios.Avengers.Endgame.2019.2160p/master.m3u8" type="application/x-mpegURL" />
-            
-            <p class="vjs-no-js">
-                To view this video please enable JavaScript, and consider upgrading to a web browser that
-                <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
-            </p>
-        </video>
+    <div class="controls-container">
+        <input type="text" id="hls-input" placeholder="Paste HuggingFace master.m3u8 link here..." />
+        <button id="load-btn">Go</button>
     </div>
 
-    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+    <div class="video-container">
+        <video id="video" controls crossorigin="anonymous"></video>
+    </div>
     
+    <div id="error-log"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const video = document.getElementById('video');
+            const inputField = document.getElementById('hls-input');
+            const loadButton = document.getElementById('load-btn');
+            const errorLog = document.getElementById('error-log');
+            let hls;
+
+            function loadStream() {
+                const url = inputField.value.trim();
+                errorLog.innerText = ""; // Clear old errors
+                
+                if (!url) return;
+
+                if (Hls.isSupported()) {
+                    if (hls) {
+                        hls.destroy(); // Clean up old instance
+                    }
+                    
+                    hls = new Hls({
+                        debug: false,
+                        enableWorker: true
+                    });
+
+                    hls.loadSource(url);
+                    hls.attachMedia(video);
+
+                    hls.on(Hls.Events.ERROR, function (event, data) {
+                        if (data.fatal) {
+                            switch (data.type) {
+                                case Hls.ErrorTypes.NETWORK_ERROR:
+                                    errorLog.innerText = "Network Error: HuggingFace might be blocking the request or a file is missing (404).";
+                                    hls.startLoad();
+                                    break;
+                                case Hls.ErrorTypes.MEDIA_ERROR:
+                                    errorLog.innerText = "Media Error: Your browser cannot decode this video codec (Likely HEVC/H.265 unsupported).";
+                                    hls.recoverMediaError();
+                                    break;
+                                default:
+                                    errorLog.innerText = "Fatal parsing error: " + data.details;
+                                    hls.destroy();
+                                    break;
+                            }
+                        }
+                    });
+                } 
+                // Native fallback for Safari
+                else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = url;
+                }
+            }
+
+            loadButton.addEventListener('click', loadStream);
+            inputField.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') loadStream();
+            });
+        });
+    </script>
 </body>
 </html>
