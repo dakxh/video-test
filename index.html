@@ -22,12 +22,36 @@
             width: 100%;
             max-width: 1000px;
         }
+        
+        /* Custom Track Controls Box */
+        .track-controls {
+            display: flex;
+            gap: 1rem;
+            background: #1A1A1A;
+            padding: 1rem;
+            border-radius: 8px 8px 0 0;
+            border: 1px solid #333;
+            border-bottom: none;
+            justify-content: flex-end;
+            display: none; /* Hidden until video loads */
+        }
+        .track-controls select {
+            background: #000;
+            color: #fff;
+            border: 1px solid #444;
+            padding: 0.5rem;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+        }
+        
         .video-container {
             margin-bottom: 2rem;
-            border-radius: 8px;
+            border-radius: 0 0 8px 8px;
             overflow: hidden;
             background: #111;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 1px solid #333;
         }
         h2 {
             font-weight: 500;
@@ -66,11 +90,28 @@
             color: #888;
             font-style: italic;
         }
+        
+        /* Force Plyr to hide its broken native caption button */
+        .plyr__controls [data-plyr="captions"] {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
 
     <div class="container">
+        
+        <div class="track-controls" id="track-controls">
+            <div>
+                <label for="audio-select" style="font-size: 0.85rem; color: #888; margin-right: 0.5rem;">Audio:</label>
+                <select id="audio-select"></select>
+            </div>
+            <div>
+                <label for="sub-select" style="font-size: 0.85rem; color: #888; margin-right: 0.5rem;">Subtitles:</label>
+                <select id="sub-select"></select>
+            </div>
+        </div>
+
         <div class="video-container">
             <video id="player" controls crossorigin playsinline></video>
         </div>
@@ -89,82 +130,112 @@
         const listContainer = document.getElementById('catalog-list');
         const loadingIndicator = document.getElementById('loading');
         
+        const trackControls = document.getElementById('track-controls');
+        const audioSelect = document.getElementById('audio-select');
+        const subSelect = document.getElementById('sub-select');
+        
         let currentHls = null;
         let plyrInstance = null;
 
-        // 1. Initialize Video Player
         function initPlayer() {
+            // Initialize Plyr but DISABLE its native caption handling so HLS.js can take over
             plyrInstance = new Plyr(videoElement, {
-                captions: { active: true, update: true, language: 'en' }
+                captions: { active: false, update: false }
             });
         }
 
-        // 2. Load Video Stream
         function playVideo(manifestUrl, title) {
-            // Destroy previous HLS instance if it exists
             if (currentHls) {
                 currentHls.destroy();
             }
 
             if (Hls.isSupported()) {
                 currentHls = new Hls({
-                    // 1. Network & Timeout Forgiveness (Crucial for HF CDN Redirects)
-                    fragLoadingTimeOut: 60000,       // Wait up to 60 seconds for a chunk
+                    fragLoadingTimeOut: 60000,
                     manifestLoadingTimeOut: 60000,
-                    fragLoadingMaxRetry: 10,         // Retry 10 times before giving up
+                    fragLoadingMaxRetry: 10,
                     fragLoadingRetryDelay: 500,
-                    
-                    // 2. Buffer Aggressiveness (Keep memory usage safe but buffer deep)
-                    maxBufferLength: 60,             // Buffer 60 seconds ahead
-                    maxMaxBufferLength: 120,         // Maximum buffer allowed
-                    maxBufferSize: 60 * 1000 * 1000, // Up to 60MB of RAM for the buffer
-                    
-                    // 3. Seeking & Keyframe Forgiveness (Crucial for -c:v copy)
-                    maxFragLookUpTolerance: 0.5,     // Allow slight desyncs in keyframes
-                    enableWorker: true,              // Use Web Workers to prevent UI freezing
-                    lowLatencyMode: false            // We are VOD, not Twitch. Disable this.
+                    maxBufferLength: 60,
+                    maxMaxBufferLength: 120,
+                    maxBufferSize: 60 * 1000 * 1000,
+                    maxFragLookUpTolerance: 0.5,
+                    enableWorker: true,
+                    lowLatencyMode: false,
+                    // Crucial: Tell HLS.js to render subtitles directly to the video element
+                    renderTextTracksNatively: true 
                 });
                 
                 currentHls.loadSource(manifestUrl);
                 currentHls.attachMedia(videoElement);
+                
+                // When Manifest is parsed, extract the tracks
                 currentHls.on(Hls.Events.MANIFEST_PARSED, function () {
                     videoElement.play();
+                    
+                    // Show our custom controls
+                    trackControls.style.display = 'flex';
+                    
+                    // 1. Populate Audio Tracks
+                    audioSelect.innerHTML = '';
+                    currentHls.audioTracks.forEach((track, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = track.name || `Audio ${index + 1}`;
+                        audioSelect.appendChild(option);
+                    });
+                    
+                    // 2. Populate Subtitle Tracks
+                    subSelect.innerHTML = '<option value="-1">Off</option>';
+                    currentHls.subtitleTracks.forEach((track, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = track.name || `Subtitle ${index + 1}`;
+                        subSelect.appendChild(option);
+                    });
+
+                    // Set initial values
+                    audioSelect.value = currentHls.audioTrack;
+                    subSelect.value = currentHls.subtitleTrack;
                 });
+
             } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-                // For Safari (Native HLS Support)
                 videoElement.src = manifestUrl;
                 videoElement.addEventListener('loadedmetadata', function () {
                     videoElement.play();
                 });
+                // Note: Safari native HLS handles audio/subs via its own UI, so we hide ours
+                trackControls.style.display = 'none';
             }
             
             window.scrollTo({ top: 0, behavior: 'smooth' });
             console.log("Playing:", title);
         }
 
-        // 3. Fetch Data from Hugging Face
+        // Handle Audio Change
+        audioSelect.addEventListener('change', (e) => {
+            if(currentHls) currentHls.audioTrack = parseInt(e.target.value);
+        });
+
+        // Handle Subtitle Change
+        subSelect.addEventListener('change', (e) => {
+            if(currentHls) currentHls.subtitleTrack = parseInt(e.target.value);
+        });
+
         async function loadCatalog() {
             try {
-                // Fetch the entire repository tree
                 const treeRes = await fetch(`https://huggingface.co/api/datasets/${REPO}/tree/main?recursive=true`);
                 const tree = await treeRes.json();
-
-                // Find all metadata.json files
                 const metadataFiles = tree.filter(f => f.path.endsWith('metadata.json'));
-                
                 loadingIndicator.style.display = 'none';
 
                 for (const file of metadataFiles) {
-                    // Fetch the actual JSON content
                     const metaRes = await fetch(`https://huggingface.co/datasets/${REPO}/raw/main/${file.path}`);
                     const data = await metaRes.json();
 
-                    // We only want to list playable files (Movies or TV Episodes)
                     if (data.hls_manifest_url) {
                         const li = document.createElement('li');
                         li.className = 'catalog-item';
                         
-                        // Formatting TV Shows (e.g. "Gachiakuta - Episode 01")
                         let displayTitle = data.title;
                         if (file.path.includes('/Season')) {
                             const showName = file.path.split('/')[0].replace(/\./g, ' ');
@@ -186,7 +257,6 @@
             }
         }
 
-        // Boot up
         initPlayer();
         loadCatalog();
     </script>
