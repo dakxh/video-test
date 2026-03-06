@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS Tester</title>
+    <title>Avengers: Endgame - Stream</title>
     
     <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
     <link href="https://unpkg.com/@videojs/themes@1/dist/city/index.css" rel="stylesheet" />
@@ -21,40 +21,6 @@
             margin: 0;
             padding: 20px;
         }
-        .controls-container {
-            width: 100%;
-            max-width: 1024px;
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        input[type="text"] {
-            flex-grow: 1;
-            padding: 12px 15px;
-            border-radius: 6px;
-            border: 1px solid #333;
-            background-color: #1e1e1e;
-            color: #fff;
-            font-size: 16px;
-            outline: none;
-        }
-        input[type="text"]:focus {
-            border-color: #6200ea;
-        }
-        button {
-            padding: 12px 24px;
-            background-color: #6200ea;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.2s;
-        }
-        button:hover {
-            background-color: #7c4dff;
-        }
         .video-container {
             width: 100%;
             max-width: 1024px;
@@ -71,12 +37,7 @@
 </head>
 <body>
 
-    <h1>HLS Stream Tester</h1>
-
-    <div class="controls-container">
-        <input type="text" id="hls-input" placeholder="Paste HuggingFace master.m3u8 link here..." />
-        <button id="load-btn">Go</button>
-    </div>
+    <h1>Avengers: Endgame (2160p)</h1>
 
     <div class="video-container">
         <video
@@ -88,6 +49,8 @@
             crossorigin="anonymous"
             data-setup='{}'
         >
+            <source src="https://huggingface.co/datasets/Gravatar44/record/resolve/main/Marvel.Studios.Avengers.Endgame.2019.2160p/master.m3u8" type="application/x-mpegURL" />
+            
             <p class="vjs-no-js">
                 To view this video please enable JavaScript, and consider upgrading to a web browser that
                 <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
@@ -96,40 +59,6 @@
     </div>
 
     <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
-    
-    <script>
-        // Initialize Video.js after the DOM loads
-        document.addEventListener('DOMContentLoaded', () => {
-            const player = videojs('my-video');
-            const inputField = document.getElementById('hls-input');
-            const loadButton = document.getElementById('load-btn');
-
-            function loadStream() {
-                const url = inputField.value.trim();
-                
-                if (url) {
-                    // Update the player's source dynamically
-                    player.src({
-                        src: url,
-                        type: 'application/x-mpegURL'
-                    });
-                    
-                    // Optional: Autoplay when a new link is loaded
-                    player.play().catch(e => console.log("Autoplay prevented:", e));
-                }
-            }
-
-            // Trigger load when clicking "Go"
-            loadButton.addEventListener('click', loadStream);
-
-            // Trigger load when pressing Enter in the input field
-            inputField.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    loadStream();
-                }
-            });
-        });
-    </script>
     
 </body>
 </html>
