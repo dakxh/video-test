@@ -1,146 +1,173 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HLS.js Tester</title>
-    
-    <style>
-        body {
-            background-color: #121212;
-            color: #ffffff;
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        .controls-container {
-            width: 100%;
-            max-width: 1024px;
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        input[type="text"] {
-            flex-grow: 1;
-            padding: 12px 15px;
-            border-radius: 6px;
-            border: 1px solid #333;
-            background-color: #1e1e1e;
-            color: #fff;
-            font-size: 16px;
-            outline: none;
-        }
-        button {
-            padding: 12px 24px;
-            background-color: #6200ea;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        button:hover { background-color: #7c4dff; }
-        .video-container {
-            width: 100%;
-            max-width: 1024px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-            border-radius: 8px;
-            overflow: hidden;
-            background-color: #000;
-        }
-        video {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        #error-log {
-            color: #ff5252;
-            margin-top: 15px;
-            font-family: monospace;
-            text-align: center;
-        }
-    </style>
+    <title>Artplayer Anime Engine Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.3.5/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer/dist/artplayer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub/dist/artplayer-plugin-jassub.js"></script>
 </head>
-<body>
 
-    <h1>Stream Tester (HLS.js)</h1>
+<body class="bg-neutral-950 text-neutral-200 min-h-screen p-8 font-sans">
 
-    <div class="controls-container">
-        <input type="text" id="hls-input" placeholder="Paste HuggingFace master.m3u8 link here..." />
-        <button id="load-btn">Go</button>
+    <div class="max-w-5xl mx-auto space-y-8">
+        <header class="space-y-2">
+            <h1 class="text-3xl font-bold text-white tracking-tight">Headless Anime Tester</h1>
+            <p class="text-neutral-400">Vanilla HTML + Artplayer + Native WebAssembly .ass Rendering</p>
+        </header>
+
+        <section class="bg-neutral-900/50 p-6 rounded-xl border border-neutral-800 space-y-4">
+            <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                    Video Manifest (master.m3u8)
+                </label>
+                <input id="m3u8-input" type="text" placeholder="https://huggingface.co/.../master.m3u8"
+                    class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors text-white" />
+            </div>
+            <button onclick="loadStream()"
+                class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors">
+                Load Stream
+            </button>
+        </section>
+
+        <div class="w-full aspect-video rounded-xl overflow-hidden shadow-2xl border border-neutral-800 bg-black">
+            <div id="artplayer-app" class="w-full h-full"></div>
+        </div>
     </div>
 
-    <div class="video-container">
-        <video id="video" controls crossorigin="anonymous"></video>
-    </div>
-    
-    <div id="error-log"></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-    
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const video = document.getElementById('video');
-            const inputField = document.getElementById('hls-input');
-            const loadButton = document.getElementById('load-btn');
-            const errorLog = document.getElementById('error-log');
-            let hls;
+        let art = null;
 
-            function loadStream() {
-                const url = inputField.value.trim();
-                errorLog.innerText = ""; // Clear old errors
-                
-                if (!url) return;
+        async function loadStream() {
+            const inputUrl = document.getElementById('m3u8-input').value.trim();
+            if (!inputUrl) return alert("Please paste a master.m3u8 link!");
 
-                if (Hls.isSupported()) {
-                    if (hls) {
-                        hls.destroy(); // Clean up old instance
-                    }
-                    
-                    hls = new Hls({
-                        debug: false,
-                        enableWorker: true
-                    });
+            const metadataUrl = inputUrl.replace('master.m3u8', 'metadata.json');
+            let assUrls = [];
+            let fontUrls = [];
 
-                    hls.loadSource(url);
-                    hls.attachMedia(video);
-
-                    hls.on(Hls.Events.ERROR, function (event, data) {
-                        if (data.fatal) {
-                            switch (data.type) {
-                                case Hls.ErrorTypes.NETWORK_ERROR:
-                                    errorLog.innerText = "Network Error: HuggingFace might be blocking the request or a file is missing (404).";
-                                    hls.startLoad();
-                                    break;
-                                case Hls.ErrorTypes.MEDIA_ERROR:
-                                    errorLog.innerText = "Media Error: Your browser cannot decode this video codec (Likely HEVC/H.265 unsupported).";
-                                    hls.recoverMediaError();
-                                    break;
-                                default:
-                                    errorLog.innerText = "Fatal parsing error: " + data.details;
-                                    hls.destroy();
-                                    break;
-                            }
-                        }
-                    });
-                } 
-                // Native fallback for Safari
-                else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                    video.src = url;
+            try {
+                const res = await fetch(metadataUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.ass_subtitles) assUrls = data.ass_subtitles;
+                    if (data.fonts) fontUrls = data.fonts;
                 }
+            } catch (error) {
+                console.warn("No metadata.json found next to this manifest.");
             }
 
-            loadButton.addEventListener('click', loadStream);
-            inputField.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') loadStream();
+            if (art) {
+                art.destroy(false);
+                art = null;
+            }
+
+            const defaultSubUrl = assUrls.length > 0 ? assUrls[0] : "";
+            const subtitleSelector = assUrls.map((url, index) => {
+                const match = url.match(/subs_\d+_(.*?)\.ass/);
+                const langName = match ? match[1].toUpperCase() : `Track ${index + 1}`;
+                return { default: index === 0, html: langName, url: url };
             });
-        });
+            subtitleSelector.push({ default: assUrls.length === 0, html: "Off", url: "" });
+
+            art = new Artplayer({
+                container: '#artplayer-app',
+                url: inputUrl,
+                title: "Anime Test",
+                theme: "#3b82f6",
+                volume: 1,
+                autoSize: true,
+                playbackRate: true,
+                setting: true,
+                fullscreen: true,
+                fullscreenWeb: true,
+                playsInline: true,
+
+                customType: {
+                    m3u8: function (video, url, art) {
+                        if (Hls.isSupported()) {
+                            if (art.hls) art.hls.destroy();
+
+                            const hls = new Hls({
+                                maxBufferSize: 30 * 1000 * 1000,
+                                maxMaxBufferLength: 30,
+                            });
+
+                            hls.loadSource(url);
+                            hls.attachMedia(video);
+                            art.hls = hls;
+
+                            hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+                                // ⚡ THE BLACK SCREEN FIX:
+                                // Find the level that actually has physical video dimensions
+                                const videoLevelIndex = data.levels.findIndex(lvl => lvl.width > 0 || lvl.height > 0);
+
+                                if (videoLevelIndex !== -1) {
+                                    hls.startLevel = videoLevelIndex; // Force start on the video
+                                    hls.currentLevel = videoLevelIndex; // Lock ABR so it never drops to the audio track
+                                }
+
+                                // Build Native Audio Switcher Menu
+                                if (hls.audioTracks.length > 1) {
+                                    const audioOptions = hls.audioTracks.map((track, index) => ({
+                                        default: track.default,
+                                        html: track.name || `Audio ${index + 1}`,
+                                        id: track.id,
+                                    }));
+
+                                    art.setting.add({
+                                        name: "audio-tracks",
+                                        html: "Audio Track",
+                                        tooltip: audioOptions.find(t => t.default)?.html || "Default",
+                                        selector: audioOptions,
+                                        onSelect: function (item) {
+                                            hls.audioTrack = item.id;
+                                            return item.html;
+                                        },
+                                    });
+                                }
+                            });
+
+                            art.on("destroy", () => hls.destroy());
+                        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+                            video.src = url;
+                        }
+                    }
+                },
+
+                plugins: [
+                    artplayerPluginJassub({
+                        subUrl: defaultSubUrl,
+                        fonts: fontUrls,
+                        workerUrl: "https://cdn.jsdelivr.net/npm/jassub@1.0.6/dist/jassub-worker.js",
+                        wasmUrl: "https://cdn.jsdelivr.net/npm/jassub@1.0.6/dist/jassub-worker.wasm",
+                        targetFps: 60,
+                    }),
+                ],
+
+                settings: assUrls.length > 0 ? [
+                    {
+                        html: "Subtitles",
+                        tooltip: subtitleSelector.find(s => s.default)?.html || "Off",
+                        selector: subtitleSelector,
+                        onSelect: function (item) {
+                            const jassubInstance = art.plugins.artplayerPluginJassub;
+                            if (item.url === "") {
+                                jassubInstance.freeTrack();
+                            } else {
+                                jassubInstance.setTrackByUrl(item.url);
+                            }
+                            return item.html;
+                        },
+                    }
+                ] : [],
+            });
+        }
     </script>
 </body>
+
 </html>
