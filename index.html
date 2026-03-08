@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Player - Raw Engine Test</title>
+    <title>Anime Player - Final Engine Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.3.5/dist/hls.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/artplayer/dist/artplayer.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/jassub@1.0.6/dist/jassub.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub/dist/artplayer-plugin-jassub.js"></script>
 </head>
 <body class="bg-neutral-950 text-neutral-200 min-h-screen p-8 font-sans">
 
     <div class="max-w-5xl mx-auto space-y-8">
         <header class="space-y-2">
-            <h1 class="text-3xl font-bold text-white tracking-tight">Raw JASSUB + Artplayer</h1>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Artplayer + Native JASSUB</h1>
             <p class="text-neutral-400">Guaranteed WebAssembly Subtitle Rendering & Switching.</p>
         </header>
 
@@ -46,7 +45,6 @@
 
     <script>
         let art = null; 
-        let jassub = null; // ⚡ We control the engine instance globally now
 
         async function loadStream() {
             const inputUrl = document.getElementById('m3u8-input').value.trim();
@@ -67,11 +65,6 @@
                 console.warn("No metadata.json found.");
             }
 
-            // Cleanup previous instances safely
-            if (jassub) {
-                jassub.destroy();
-                jassub = null;
-            }
             if (art) {
                 art.destroy(false);
                 art = null;
@@ -85,7 +78,6 @@
             });
             subtitleSelector.push({ default: assUrls.length === 0, html: "Off", url: "" });
 
-            // 1. Boot up Artplayer normally
             art = new Artplayer({
                 container: '#artplayer-app',
                 url: inputUrl,
@@ -145,41 +137,36 @@
                             video.src = url; 
                         }
                     }
-                }
-            });
+                },
 
-            // ⚡ 2. ONCE THE PLAYER IS READY, WE ATTACH THE SUBTITLE ENGINE ⚡
-            art.on('ready', () => {
-                
-                // Initialize JASSUB Native Engine directly onto the video element
-                jassub = new JASSUB({
-                    video: art.video,
-                    subUrl: defaultSubUrl,
-                    fonts: fontUrls,
-                    // Must match the files in your GitHub Pages repo!
-                    workerUrl: "./jassub-worker.js",
-                    wasmUrl: "./jassub-worker.wasm",
-                    targetFps: 60,
-                    debug: false
-                });
+                plugins: [
+                    artplayerPluginJassub({
+                        subUrl: defaultSubUrl,
+                        fonts: fontUrls,
+                        // ⚡ MUST identically match the files hosted in your GitHub Pages repo
+                        workerUrl: "./worker.js", 
+                        wasmUrl: "./jassub-worker.wasm",
+                        targetFps: 60,
+                    }),
+                ],
 
-                // Manually build the Subtitle menu inside Artplayer's UI
-                if (assUrls.length > 0) {
-                    art.setting.add({
-                        name: "subtitle-tracks",
+                settings: assUrls.length > 0 ? [
+                    {
                         html: "Subtitles",
                         tooltip: subtitleSelector.find(s => s.default)?.html || "Off",
                         selector: subtitleSelector,
                         onSelect: function (item) {
+                            // ⚡ FIX: Talk to Artplayer natively, not the plugin instance
                             if (item.url === "") {
-                                jassub.freeTrack(); // Safely clears the canvas
+                                art.subtitle.show = false;
                             } else {
-                                jassub.setTrackByUrl(item.url); // Hot-swaps natively!
+                                art.subtitle.switch(item.url, { name: item.html });
+                                art.subtitle.show = true;
                             }
                             return item.html;
                         },
-                    });
-                }
+                    }
+                ] : [],
             });
         }
     </script>
