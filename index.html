@@ -1,23 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artplayer Anime Engine Test</title>
+    <title>Anime Player - Raw Engine Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer@5.3.0/dist/artplayer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub@1.0.0/dist/artplayer-plugin-jassub.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.3.5/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer/dist/artplayer.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/jassub@1.0.6/dist/jassub.js"></script>
 </head>
-
 <body class="bg-neutral-950 text-neutral-200 min-h-screen p-8 font-sans">
 
     <div class="max-w-5xl mx-auto space-y-8">
         <header class="space-y-2">
-            <h1 class="text-3xl font-bold text-white tracking-tight">Headless Anime Tester</h1>
-            <p class="text-neutral-400">Vanilla HTML + Artplayer + Native WebAssembly .ass Rendering</p>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Raw JASSUB + Artplayer</h1>
+            <p class="text-neutral-400">Guaranteed WebAssembly Subtitle Rendering & Switching.</p>
         </header>
 
         <section class="bg-neutral-900/50 p-6 rounded-xl border border-neutral-800 space-y-4">
@@ -25,11 +24,17 @@
                 <label class="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
                     Video Manifest (master.m3u8)
                 </label>
-                <input id="m3u8-input" type="text" placeholder="https://huggingface.co/.../master.m3u8"
-                    class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors text-white" />
+                <input
+                    id="m3u8-input"
+                    type="text"
+                    placeholder="https://huggingface.co/.../master.m3u8"
+                    class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors text-white"
+                />
             </div>
-            <button onclick="loadStream()"
-                class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors">
+            <button
+                onclick="loadStream()"
+                class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg transition-colors"
+            >
                 Load Stream
             </button>
         </section>
@@ -40,7 +45,8 @@
     </div>
 
     <script>
-        let art = null;
+        let art = null; 
+        let jassub = null; // ⚡ We control the engine instance globally now
 
         async function loadStream() {
             const inputUrl = document.getElementById('m3u8-input').value.trim();
@@ -58,9 +64,14 @@
                     if (data.fonts) fontUrls = data.fonts;
                 }
             } catch (error) {
-                console.warn("No metadata.json found next to this manifest.");
+                console.warn("No metadata.json found.");
             }
 
+            // Cleanup previous instances safely
+            if (jassub) {
+                jassub.destroy();
+                jassub = null;
+            }
             if (art) {
                 art.destroy(false);
                 art = null;
@@ -74,6 +85,7 @@
             });
             subtitleSelector.push({ default: assUrls.length === 0, html: "Off", url: "" });
 
+            // 1. Boot up Artplayer normally
             art = new Artplayer({
                 container: '#artplayer-app',
                 url: inputUrl,
@@ -86,14 +98,14 @@
                 fullscreen: true,
                 fullscreenWeb: true,
                 playsInline: true,
-
+                
                 customType: {
                     m3u8: function (video, url, art) {
                         if (Hls.isSupported()) {
                             if (art.hls) art.hls.destroy();
 
                             const hls = new Hls({
-                                maxBufferSize: 30 * 1000 * 1000,
+                                maxBufferSize: 30 * 1000 * 1000, 
                                 maxMaxBufferLength: 30,
                             });
 
@@ -102,16 +114,12 @@
                             art.hls = hls;
 
                             hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-                                // ⚡ THE BLACK SCREEN FIX:
-                                // Find the level that actually has physical video dimensions
                                 const videoLevelIndex = data.levels.findIndex(lvl => lvl.width > 0 || lvl.height > 0);
-
                                 if (videoLevelIndex !== -1) {
-                                    hls.startLevel = videoLevelIndex; // Force start on the video
-                                    hls.currentLevel = videoLevelIndex; // Lock ABR so it never drops to the audio track
+                                    hls.startLevel = videoLevelIndex; 
+                                    hls.currentLevel = videoLevelIndex; 
                                 }
 
-                                // Build Native Audio Switcher Menu
                                 if (hls.audioTracks.length > 1) {
                                     const audioOptions = hls.audioTracks.map((track, index) => ({
                                         default: track.default,
@@ -134,45 +142,46 @@
 
                             art.on("destroy", () => hls.destroy());
                         } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                            video.src = url;
+                            video.src = url; 
                         }
                     }
-                },
+                }
+            });
 
-                // --- OFFICIAL JASSUB PLUGIN (.ASS RENDERING) ---
-        plugins: [
-            artplayerPluginJassub({
-                subUrl: defaultSubUrl,
-                fonts: fontUrls,
-                // ⚡ FIX 1: Point EXACTLY to your renamed worker file!
-                workerUrl: "./worker.js", 
-                wasmUrl: "./jassub-worker.wasm",
-                targetFps: 60,
-            }),
-        ],
+            // ⚡ 2. ONCE THE PLAYER IS READY, WE ATTACH THE SUBTITLE ENGINE ⚡
+            art.on('ready', () => {
+                
+                // Initialize JASSUB Native Engine directly onto the video element
+                jassub = new JASSUB({
+                    video: art.video,
+                    subUrl: defaultSubUrl,
+                    fonts: fontUrls,
+                    // Must match the files in your GitHub Pages repo!
+                    workerUrl: "./jassub-worker.js",
+                    wasmUrl: "./jassub-worker.wasm",
+                    targetFps: 60,
+                    debug: false
+                });
 
-                // --- SUBTITLE TRACK SWITCHER MENU ---
-        settings: assUrls.length > 0 ? [
-            {
-                html: "Subtitles",
-                tooltip: subtitleSelector.find(s => s.default)?.html || "Off",
-                selector: subtitleSelector,
-                onSelect: function (item) {
-                    // ⚡ FIX 2: Use Artplayer's Native API instead of hacking Jassub
-                    if (item.url === "") {
-                        art.subtitle.show = false; // Turn off safely
-                    } else {
-                        // Hot swap the track natively
-                        art.subtitle.switch(item.url, { name: item.html }); 
-                        art.subtitle.show = true;
-                    }
-                    return item.html;
-                },
-            }
-        ] : [],
+                // Manually build the Subtitle menu inside Artplayer's UI
+                if (assUrls.length > 0) {
+                    art.setting.add({
+                        name: "subtitle-tracks",
+                        html: "Subtitles",
+                        tooltip: subtitleSelector.find(s => s.default)?.html || "Off",
+                        selector: subtitleSelector,
+                        onSelect: function (item) {
+                            if (item.url === "") {
+                                jassub.freeTrack(); // Safely clears the canvas
+                            } else {
+                                jassub.setTrackByUrl(item.url); // Hot-swaps natively!
+                            }
+                            return item.html;
+                        },
+                    });
+                }
             });
         }
     </script>
 </body>
-
 </html>
