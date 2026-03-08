@@ -139,32 +139,37 @@
                     }
                 },
 
-                plugins: [
-                    artplayerPluginJassub({
-                        subUrl: defaultSubUrl,
-                        fonts: fontUrls,
-                        workerUrl: "./worker.js",
-                        wasmUrl: "./jassub-worker.wasm",
-                        targetFps: 60,
-                    }),
-                ],
+                // --- OFFICIAL JASSUB PLUGIN (.ASS RENDERING) ---
+        plugins: [
+            artplayerPluginJassub({
+                subUrl: defaultSubUrl,
+                fonts: fontUrls,
+                // ⚡ FIX 1: Point EXACTLY to your renamed worker file!
+                workerUrl: "./worker.js", 
+                wasmUrl: "./jassub-worker.wasm",
+                targetFps: 60,
+            }),
+        ],
 
-                settings: assUrls.length > 0 ? [
-                    {
-                        html: "Subtitles",
-                        tooltip: subtitleSelector.find(s => s.default)?.html || "Off",
-                        selector: subtitleSelector,
-                        onSelect: function (item) {
-                            const jassubInstance = art.plugins.artplayerPluginJassub;
-                            if (item.url === "") {
-                                jassubInstance.freeTrack();
-                            } else {
-                                jassubInstance.setTrackByUrl(item.url);
-                            }
-                            return item.html;
-                        },
+                // --- SUBTITLE TRACK SWITCHER MENU ---
+        settings: assUrls.length > 0 ? [
+            {
+                html: "Subtitles",
+                tooltip: subtitleSelector.find(s => s.default)?.html || "Off",
+                selector: subtitleSelector,
+                onSelect: function (item) {
+                    // ⚡ FIX 2: Use Artplayer's Native API instead of hacking Jassub
+                    if (item.url === "") {
+                        art.subtitle.show = false; // Turn off safely
+                    } else {
+                        // Hot swap the track natively
+                        art.subtitle.switch(item.url, { name: item.html }); 
+                        art.subtitle.show = true;
                     }
-                ] : [],
+                    return item.html;
+                },
+            }
+        ] : [],
             });
         }
     </script>
