@@ -7,9 +7,9 @@
     <title>Artplayer Anime Engine Test</title>
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.3.5/dist/hls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer/dist/artplayer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub/dist/artplayer-plugin-jassub.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.15/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer@5.3.0/dist/artplayer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub@1.0.0/dist/artplayer-plugin-jassub.js"></script>
 </head>
 
 <body class="bg-neutral-950 text-neutral-200 min-h-screen p-8 font-sans">
@@ -143,8 +143,8 @@
                     artplayerPluginJassub({
                         subUrl: defaultSubUrl,
                         fonts: fontUrls,
-                        workerUrl: "https://cdn.jsdelivr.net/npm/jassub@1.0.6/dist/jassub-worker.js",
-                        wasmUrl: "https://cdn.jsdelivr.net/npm/jassub@1.0.6/dist/jassub-worker.wasm",
+                        workerUrl: "https://cdn.jsdelivr.net/npm/jassub@1.7.18/dist/jassub-worker.js",
+                        wasmUrl: "https://cdn.jsdelivr.net/npm/jassub@1.7.18/dist/jassub-worker.wasm",
                         targetFps: 60,
                     }),
                 ],
