@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artplayer | Advanced HLS & ASS Tester</title>
+    <title>Artplayer | Advanced HLS & JASSUB Tester</title>
 
     <script src="https://cdn.jsdelivr.net/npm/artplayer@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-ass@latest"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub@1.0.0/dist/artplayer-plugin-jassub.js"></script>
 
     <style>
         :root {
@@ -134,15 +135,14 @@
     }
 
     function initializePlayer(metadata) {
-        // Strict dependency check before execution
-        if (typeof window.artplayerPluginAss === 'undefined') {
-            const errorMsg = "Critical Error: artplayerPluginAss did not load from the CDN. Please check your network connection or ad-blocker.";
+        // Strict dependency check tailored to the new JASSUB plugin
+        if (typeof window.artplayerPluginJassub === 'undefined') {
+            const errorMsg = "Critical Error: artplayerPluginJassub did not load. Please check your network or ad-blocker.";
             console.error(errorMsg);
             alert(errorMsg);
             return;
         }
 
-        // Destroy existing instance to ensure a clean state
         if (art) {
             art.destroy(true);
             art = null;
@@ -230,12 +230,14 @@
             }
         };
 
+        // Inject the new JASSUB plugin
         if (subtitles.length > 0) {
             artOptions.plugins = [
-                window.artplayerPluginAss({
+                window.artplayerPluginJassub({
                     debug: false,
                     subUrl: subtitles[0], 
                     fonts: fonts,         
+                    // Fetch latest WebAssembly workers securely to prevent execution blocks
                     workerUrl: './jassub-worker.js',
                     wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
                 })
@@ -248,8 +250,18 @@
                     tooltip: subSelector[0].html,
                     selector: subSelector,
                     onSelect: function (item) {
-                        if (art.plugins.artplayerPluginAss) {
-                            art.plugins.artplayerPluginAss.switchSubtitle(item.url);
+                        const jassubPlugin = art.plugins.artplayerPluginJassub;
+                        if (jassubPlugin) {
+                            // Bulletproof fallback chain for method resolution in v1.0.0
+                            if (typeof jassubPlugin.switchSubtitle === 'function') {
+                                jassubPlugin.switchSubtitle(item.url);
+                            } else if (typeof jassubPlugin.switch === 'function') {
+                                jassubPlugin.switch(item.url);
+                            } else if (jassubPlugin.setTrackByUrl) {
+                                jassubPlugin.setTrackByUrl(item.url);
+                            } else {
+                                console.error("Could not find a valid track-switching method on artplayerPluginJassub.");
+                            }
                         }
                         return item.html;
                     }
