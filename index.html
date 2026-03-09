@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Artplayer | Advanced HLS & ASS Tester</title>
 
-    <script src="https://cdn.jsdelivr.net/npm/artplayer@latest/dist/artplayer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub@1.0.0/dist/artplayer-plugin-jassub.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-ass@latest"></script>
 
     <style>
         :root {
@@ -134,6 +134,14 @@
     }
 
     function initializePlayer(metadata) {
+        // Strict dependency check before execution
+        if (typeof window.artplayerPluginAss === 'undefined') {
+            const errorMsg = "Critical Error: artplayerPluginAss did not load from the CDN. Please check your network connection or ad-blocker.";
+            console.error(errorMsg);
+            alert(errorMsg);
+            return;
+        }
+
         // Destroy existing instance to ensure a clean state
         if (art) {
             art.destroy(true);
@@ -144,9 +152,7 @@
         const subtitles = metadata.ass_subtitles || [];
         const fonts = metadata.fonts || [];
 
-        // Build Subtitle Selectors for Artplayer Settings Menu
         const subSelector = subtitles.map((subUrl, index) => {
-            // Attempt to extract clean name from URL (e.g., "subs_3_English.ass" -> "English")
             const match = subUrl.match(/subs_\d+_(.*?)\.ass/i);
             const name = match ? match[1].replace(/_/g, ' ') : `Subtitle Track ${index + 1}`;
             return {
@@ -194,7 +200,6 @@
                         
                         artInstance.on('destroy', () => hls.destroy());
 
-                        // Hook into HLS.js to map embedded audio tracks to Artplayer's UI
                         hls.on(Hls.Events.MANIFEST_PARSED, function () {
                             const audioTracks = hls.audioTracks;
                             if (audioTracks && audioTracks.length > 1) {
@@ -225,20 +230,17 @@
             }
         };
 
-        // Inject Artplayer Official ASS Plugin Configuration
         if (subtitles.length > 0) {
             artOptions.plugins = [
-                artplayerPluginAss({
+                window.artplayerPluginAss({
                     debug: false,
-                    subUrl: subtitles[0], // Load default sub
-                    fonts: fonts,         // Pass specific huggingface font blobs
-                    // Use updated JASSUB workers heavily recommended to prevent browser cross-origin WASM execution blocks
+                    subUrl: subtitles[0], 
+                    fonts: fonts,         
                     workerUrl: './jassub-worker.js',
                     wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
                 })
             ];
 
-            // Add subtitle track switching capability to Artplayer's UI if multiple tracks exist
             if (subtitles.length > 1) {
                 artOptions.settings.push({
                     html: 'Subtitles',
@@ -246,9 +248,8 @@
                     tooltip: subSelector[0].html,
                     selector: subSelector,
                     onSelect: function (item) {
-                        // Dynamically update the SubtitlesOctopus instance with the new .ass file
                         if (art.plugins.artplayerPluginAss) {
-                            art.plugins.artplayerPluginAss.setTrackByUrl(item.url);
+                            art.plugins.artplayerPluginAss.switchSubtitle(item.url);
                         }
                         return item.html;
                     }
@@ -256,7 +257,6 @@
             }
         }
 
-        // Initialize Player
         art = new Artplayer(artOptions);
     }
 
