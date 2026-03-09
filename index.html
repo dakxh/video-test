@@ -3,167 +3,280 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced HLS & ASS Subtitle Testing Environment</title>
+    <title>Artplayer | Advanced HLS & ASS Tester</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/artplayer@latest/dist/artplayer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-ass@latest/dist/artplayer-plugin-ass.js"></script>
+
     <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --panel-bg: #1a1a1a;
+            --primary: #4A90E2;
+            --text: #e0e0e0;
+        }
         body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
             margin: 0;
-            padding: 20px;
-            background-color: #121212;
-            color: #ffffff;
-            font-family: system-ui, -apple-system, sans-serif;
+            padding: 30px 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
-
-        
-        .artplayer-app {
+        .container {
             width: 100%;
-            max-width: 1024px;
+            max-width: 1100px;
+        }
+        .header-box {
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        h2 { margin-top: 0; color: #fff; font-size: 1.4rem; }
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+        input {
+            flex: 1;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border: 1px solid #333;
+            background: #252525;
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus { border-color: var(--primary); }
+        button {
+            padding: 12px 24px;
+            border-radius: 6px;
+            border: none;
+            background: var(--primary);
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #357ABD; }
+        #player-wrapper {
+            width: 100%;
             aspect-ratio: 16 / 9;
-            background-color: #000;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            background: #000;
             border-radius: 8px;
             overflow: hidden;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
         }
-        #status {
+        #stream-info {
             margin-top: 20px;
-            font-family: monospace;
-            color: #4CAF50;
-            padding: 10px;
-            background: #1e1e1e;
+            background: var(--panel-bg);
+            padding: 15px 20px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            display: none;
+        }
+        .tag {
+            background: #333;
+            padding: 3px 8px;
             border-radius: 4px;
-            width: 100%;
-            max-width: 1000px;
+            font-size: 0.85rem;
+            margin-right: 8px;
+            color: #aaa;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer@5.3.0/dist/artplayer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.x/dist/hls.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub@1.0.0/dist/artplayer-plugin-jassub.js"></script>
 </head>
 <body>
-    <h2>HLS & ASS Subtitle Testing Player</h2>
-    <div class="artplayer-app"></div>
-    <div id="status">System booting... pending metadata ingestion.</div>
-    <script>
-        // 1. Define Metadata Location Endpoint
-        const METADATA_URL = 'metadata.json';
-        // Endpoint utilized in production environments
-        // Mock Payload strictly matching the required schema for standalone demonstration
-        const mockMetadata = {
-            "id": 120089,
-            "series_title": "SPY x FAMILY",
-            "season_number": 3,
-            "episode_number": 2,
-            "episode_name": "Avoid Getting Tonitrus Bolts",
-            "original_filename": " Spy x Family S3 - 02.mkv",
-            "quality": "1080p",
-            "duration": "23m",
-            "size": "0.29 GB",
-            "available_audio": ["jpn", "eng"],
-            "ass_subtitles": [
-                "https://test-streams.mux.dev/x36xhzz/subs_2_English.ass"
-            ],
-            "fonts": [
-                "https://test-streams.mux.dev/x36xhzz/fonts/font1.ttf",
-                "https://test-streams.mux.dev/x36xhzz/fonts/font2.ttf"
-            ],
-            "hls_manifest_url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
-        };
 
-        async function initializeApplication() {
-            const statusNode = document.getElementById('status');
-            try {
-                statusNode.innerText = 'Executing HTTP GET for metadata payload...';
-                // 2. Fetch Metadata Logic (Network layer abstraction)
-                // const response = await fetch(METADATA_URL);
-                // if (!response.ok) throw new Error('Network response was not ok');
-                // const metadata = await response.json();
-                const metadata = mockMetadata;
-                statusNode.innerText = 'Metadata parsed successfully. Initializing ArtPlayer and WASM dependencies...';
+<div class="container">
+    <div class="header-box">
+        <h2>Stream Metadata Source</h2>
+        <div class="input-group">
+            <input type="text" id="jsonUrl" placeholder="Enter JSON Metadata URL..." 
+                   value="https://huggingface.co/datasets/Gravatar44/anime/resolve/main/Teasing.Master.Takagi-San.1080p/Season.03/Episode.11/metadata.json">
+            <button onclick="loadStream()">Load & Play</button>
+        </div>
+    </div>
 
-                // 3. Player Initialization Flow and UI Configuration
-                const art = new Artplayer({
-                    container: '.artplayer-app',
-                    url: metadata.hls_manifest_url,
-                    title: `${metadata.series_title} - S${metadata.season_number}E${metadata.episode_number}: ${metadata.episode_name}`,
-                    setting: true,
-                    playbackRate: true,
-                    aspectRatio: true,
-                    fullscreen: true,
-                    // 4. HLS Playback Integration via Custom Type Interception
-                    customType: {
-                        m3u8: function (video, url, artInstance) {
-                            if (Hls.isSupported()) {
-                                const hls = new Hls();
-                                hls.loadSource(url);
-                                hls.attachMedia(video);
-                                // Bind the Hls instance to the player object for external reference
-                                artInstance.hls = hls;
+    <div id="player-wrapper"></div>
+    <div id="stream-info"></div>
+</div>
 
-                                // 7. Audio Track Switching Integration
-                                hls.on(Hls.Events.MANIFEST_PARSED, function () {
-                                    const tracks = hls.audioTracks;
-                                    if (tracks && tracks.length > 1) {
-                                        // Construct the Array of selection objects required by ArtPlayer
-                                        const audioSelector = tracks.map((track, index) => ({
-                                            html: track.name || track.lang || `Track ${index + 1}`,
-                                            default: index === hls.audioTrack,
-                                            value: index
-                                        }));
-                                        // Inject the UI component into the settings menu
-                                        artInstance.setting.add({
-                                            html: 'Audio Track',
-                                            width: 250,
-                                            tooltip: tracks.name || 'Default',
-                                            selector: audioSelector,
-                                            onSelect: function (item) {
-                                                // Trigger flush and track switch inside the MSE buffer
-                                                hls.audioTrack = item.value;
-                                                return item.html;
-                                            }
-                                        });
+<script>
+    let art = null;
+
+    async function loadStream() {
+        const urlInput = document.getElementById('jsonUrl').value.trim();
+        if (!urlInput) {
+            alert('Please enter a valid URL.');
+            return;
+        }
+
+        try {
+            const response = await fetch(urlInput);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const metadata = await response.json();
+            
+            initializePlayer(metadata);
+            renderMetadataInfo(metadata);
+            
+        } catch (error) {
+            console.error("Failed to load metadata:", error);
+            alert(`Error loading metadata: ${error.message}`);
+        }
+    }
+
+    function initializePlayer(metadata) {
+        // Destroy existing instance to ensure a clean state
+        if (art) {
+            art.destroy(true);
+            art = null;
+        }
+
+        const hlsUrl = metadata.hls_manifest_url;
+        const subtitles = metadata.ass_subtitles || [];
+        const fonts = metadata.fonts || [];
+
+        // Build Subtitle Selectors for Artplayer Settings Menu
+        const subSelector = subtitles.map((subUrl, index) => {
+            // Attempt to extract clean name from URL (e.g., "subs_3_English.ass" -> "English")
+            const match = subUrl.match(/subs_\d+_(.*?)\.ass/i);
+            const name = match ? match[1].replace(/_/g, ' ') : `Subtitle Track ${index + 1}`;
+            return {
+                default: index === 0,
+                html: name,
+                url: subUrl
+            };
+        });
+
+        const artOptions = {
+            container: '#player-wrapper',
+            url: hlsUrl,
+            type: 'm3u8',
+            volume: 0.7,
+            isLive: false,
+            muted: false,
+            autoplay: false,
+            pip: true,
+            autoSize: true,
+            autoMini: true,
+            setting: true,
+            loop: false,
+            flip: true,
+            playbackRate: true,
+            aspectRatio: true,
+            fullscreen: true,
+            fullscreenWeb: true,
+            subtitleOffset: false,
+            miniProgressBar: true,
+            mutex: true,
+            backdrop: true,
+            playsInline: true,
+            autoPlayback: true,
+            airplay: true,
+            theme: '#4A90E2',
+            settings: [],
+            customType: {
+                m3u8: function (video, url, artInstance) {
+                    if (Hls.isSupported()) {
+                        if (artInstance.hls) artInstance.hls.destroy();
+                        const hls = new Hls();
+                        hls.loadSource(url);
+                        hls.attachMedia(video);
+                        artInstance.hls = hls;
+                        
+                        artInstance.on('destroy', () => hls.destroy());
+
+                        // Hook into HLS.js to map embedded audio tracks to Artplayer's UI
+                        hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                            const audioTracks = hls.audioTracks;
+                            if (audioTracks && audioTracks.length > 1) {
+                                const audioSelector = audioTracks.map((track, index) => ({
+                                    html: track.name || track.language || `Audio Track ${index + 1}`,
+                                    audioId: track.id,
+                                    default: track.default || index === hls.audioTrack
+                                }));
+
+                                artInstance.setting.add({
+                                    html: 'Audio Track',
+                                    width: 250,
+                                    tooltip: audioSelector.find(t => t.default)?.html || audioSelector[0].html,
+                                    selector: audioSelector,
+                                    onSelect: function (item) {
+                                        hls.audioTrack = item.audioId;
+                                        return item.html;
                                     }
                                 });
-
-                                // Clean up the MSE instance upon player destruction to prevent memory leaks
-                                artInstance.on('destroy', () => {
-                                    hls.destroy();
-                                });
-                            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                                // Native OS fallback for Safari implementations [15]
-                                video.src = url;
-                            } else {
-                                artInstance.notice.show = 'Fatal Error: HLS architecture is not supported in this browser environment.';
                             }
-                        }
-                    },
-                    // 5. ASS Subtitle Loading and Dynamic Font Registration via JASSUB
-                    plugins: [
-                        artplayerPluginJassub({
-                            subUrl: metadata.ass_subtitles,
-                            // JASSUB consumes this array, fetching and mounting into the WASM FS
-                            fonts: metadata.fonts,
-                            // The workerUrl must point to a valid thread script to ensure off-main-thread processing
-                            workerUrl: './jassub-worker.js',
-                            wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
-                            textEncoding: 'utf-8'
-                        })
-                    ]
-                });
+                        });
+                    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        video.src = url;
+                    } else {
+                        artInstance.notice.show = 'Unsupported playback format: m3u8';
+                    }
+                }
+            }
+        };
 
-                // Attach ready listener to verify full pipeline execution
-                art.on('ready', () => {
-                    statusNode.innerText = 'Pipeline Complete. System Ready. Subtitles, Fonts, and MSE Buffers actively rendering.';
+        // Inject Artplayer Official ASS Plugin Configuration
+        if (subtitles.length > 0) {
+            artOptions.plugins = [
+                artplayerPluginAss({
+                    debug: false,
+                    subUrl: subtitles[0], // Load default sub
+                    fonts: fonts,         // Pass specific huggingface font blobs
+                    // Use updated JASSUB workers heavily recommended to prevent browser cross-origin WASM execution blocks
+                    workerUrl: './jassub-worker.js',
+                    wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
+                })
+            ];
+
+            // Add subtitle track switching capability to Artplayer's UI if multiple tracks exist
+            if (subtitles.length > 1) {
+                artOptions.settings.push({
+                    html: 'Subtitles',
+                    width: 250,
+                    tooltip: subSelector[0].html,
+                    selector: subSelector,
+                    onSelect: function (item) {
+                        // Dynamically update the SubtitlesOctopus instance with the new .ass file
+                        if (art.plugins.artplayerPluginAss) {
+                            art.plugins.artplayerPluginAss.setTrackByUrl(item.url);
+                        }
+                        return item.html;
+                    }
                 });
-            } catch (error) {
-                console.error("Initialization pipeline failed:", error);
-                statusNode.innerText = `Error: Failed to initialize application sequence. ${error.message}`;
-                statusNode.style.color = '#ff4444';
             }
         }
-        // Bootstrap application upon secure DOM resolution
-        document.addEventListener('DOMContentLoaded', initializeApplication);
-    </script>
+
+        // Initialize Player
+        art = new Artplayer(artOptions);
+    }
+
+    function renderMetadataInfo(data) {
+        const infoDiv = document.getElementById('stream-info');
+        infoDiv.style.display = 'block';
+        infoDiv.innerHTML = `
+            <div style="margin-bottom: 10px;">
+                <span class="tag">${data.quality || 'Unknown Quality'}</span>
+                <span class="tag">${data.size || 'Unknown Size'}</span>
+                <span class="tag">${data.duration || 'Unknown Duration'}</span>
+            </div>
+            <strong>${data.series_title || 'Unknown Series'}</strong> &nbsp;&mdash;&nbsp; 
+            Season ${String(data.season_number).padStart(2, '0')} Episode ${String(data.episode_number).padStart(2, '0')}: <em>${data.episode_name || 'N/A'}</em><br>
+            <div style="margin-top: 5px; color: #888; font-size: 0.85rem;">
+                Original File: ${data.original_filename || 'N/A'}
+            </div>
+        `;
+    }
+</script>
+
 </body>
 </html>
