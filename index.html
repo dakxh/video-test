@@ -145,7 +145,7 @@
                             // JASSUB consumes this array, fetching and mounting into the WASM FS
                             fonts: metadata.fonts,
                             // The workerUrl must point to a valid thread script to ensure off-main-thread processing
-                            workerUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.js',
+                            workerUrl: './jassub-worker.js',
                             wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
                             textEncoding: 'utf-8'
                         })
