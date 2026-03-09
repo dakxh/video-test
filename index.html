@@ -7,7 +7,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/artplayer@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/artplayer-plugin-jassub@1.0.0/dist/artplayer-plugin-jassub.js"></script>
 
     <style>
@@ -135,7 +134,6 @@
     }
 
     function initializePlayer(metadata) {
-        // Strict dependency check tailored to the new JASSUB plugin
         if (typeof window.artplayerPluginJassub === 'undefined') {
             const errorMsg = "Critical Error: artplayerPluginJassub did not load. Please check your network or ad-blocker.";
             console.error(errorMsg);
@@ -200,9 +198,13 @@
                         
                         artInstance.on('destroy', () => hls.destroy());
 
-                        hls.on(Hls.Events.MANIFEST_PARSED, function () {
-                            const audioTracks = hls.audioTracks;
-                            if (audioTracks && audioTracks.length > 1) {
+                        // FIXED Issue 2: Moved event trigger from MANIFEST_PARSED to AUDIO_TRACKS_UPDATED 
+                        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function (_, data) {
+                            const audioTracks = data.audioTracks;
+                            // Ensure there are tracks and we haven't already appended the setting
+                            if (audioTracks && audioTracks.length > 1 && !artInstance.audioTracksInitialized) {
+                                artInstance.audioTracksInitialized = true; // Lock to prevent UI duplication
+
                                 const audioSelector = audioTracks.map((track, index) => ({
                                     html: track.name || track.language || `Audio Track ${index + 1}`,
                                     audioId: track.id,
@@ -230,15 +232,13 @@
             }
         };
 
-        // Inject the new JASSUB plugin
         if (subtitles.length > 0) {
             artOptions.plugins = [
                 window.artplayerPluginJassub({
                     debug: false,
                     subUrl: subtitles[0], 
                     fonts: fonts,         
-                    // Fetch latest WebAssembly workers securely to prevent execution blocks
-                    workerUrl: './jassub-worker.js',
+                    workerUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.js',
                     wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
                 })
             ];
@@ -250,19 +250,22 @@
                     tooltip: subSelector[0].html,
                     selector: subSelector,
                     onSelect: function (item) {
-                        const jassubPlugin = art.plugins.artplayerPluginJassub;
-                        if (jassubPlugin) {
-                            // Bulletproof fallback chain for method resolution in v1.0.0
-                            if (typeof jassubPlugin.switchSubtitle === 'function') {
-                                jassubPlugin.switchSubtitle(item.url);
-                            } else if (typeof jassubPlugin.switch === 'function') {
-                                jassubPlugin.switch(item.url);
-                            } else if (jassubPlugin.setTrackByUrl) {
-                                jassubPlugin.setTrackByUrl(item.url);
-                            } else {
-                                console.error("Could not find a valid track-switching method on artplayerPluginJassub.");
-                            }
+                        const p = art.plugins.artplayerPluginJassub;
+                        let success = false;
+                        
+                        // FIXED Issue 1: Bypass plugin wrappers if needed and drill down to the active JASSUB instance
+                        if (p) {
+                            if (typeof p.switchSubtitle === 'function') { p.switchSubtitle(item.url); success = true; }
+                            else if (typeof p.switch === 'function') { p.switch(item.url); success = true; }
+                            else if (typeof p.setTrackByUrl === 'function') { p.setTrackByUrl(item.url); success = true; }
+                            else if (p.jassub && typeof p.jassub.setTrackByUrl === 'function') { p.jassub.setTrackByUrl(item.url); success = true; }
+                            else if (p.instance && typeof p.instance.setTrackByUrl === 'function') { p.instance.setTrackByUrl(item.url); success = true; }
                         }
+                        
+                        if (!success) {
+                            console.error("JASSUB UI Track Switcher failed. Check plugin instance structure in console:", p);
+                        }
+                        
                         return item.html;
                     }
                 });
