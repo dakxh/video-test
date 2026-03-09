@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artplayer | Advanced HLS & JASSUB Tester</title>
+    <title>Artplayer | Advanced External Override Tester</title>
 
     <script src="https://cdn.jsdelivr.net/npm/artplayer@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -14,6 +14,7 @@
             --bg-color: #0d0d0d;
             --panel-bg: #1a1a1a;
             --primary: #4A90E2;
+            --danger: #e24a4a;
             --text: #e0e0e0;
         }
         body {
@@ -37,12 +38,12 @@
             margin-bottom: 20px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        h2 { margin-top: 0; color: #fff; font-size: 1.4rem; }
+        h2 { margin-top: 0; color: #fff; font-size: 1.2rem; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;}
         .input-group {
             display: flex;
             gap: 10px;
         }
-        input {
+        input, select {
             flex: 1;
             padding: 12px 15px;
             border-radius: 6px;
@@ -53,7 +54,7 @@
             outline: none;
             transition: border-color 0.2s;
         }
-        input:focus { border-color: var(--primary); }
+        input:focus, select:focus { border-color: var(--primary); }
         button {
             padding: 12px 24px;
             border-radius: 6px;
@@ -66,6 +67,32 @@
             transition: background 0.2s;
         }
         button:hover { background: #357ABD; }
+        
+        /* New External Controls Styling */
+        #external-controls {
+            display: none;
+            background: #111;
+            border: 1px solid #333;
+            border-left: 4px solid var(--danger);
+        }
+        .control-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 8px;
+        }
+        .control-group label {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #aaa;
+        }
+
         #player-wrapper {
             width: 100%;
             aspect-ratio: 16 / 9;
@@ -97,11 +124,29 @@
 
 <div class="container">
     <div class="header-box">
-        <h2>Stream Metadata Source</h2>
+        <h2>1. Stream Metadata Source</h2>
         <div class="input-group">
             <input type="text" id="jsonUrl" placeholder="Enter JSON Metadata URL..." 
                    value="https://huggingface.co/datasets/Gravatar44/anime/resolve/main/Teasing.Master.Takagi-San.1080p/Season.03/Episode.11/metadata.json">
-            <button onclick="loadStream()">Load & Play</button>
+            <button onclick="loadStream()">Load Player</button>
+        </div>
+    </div>
+
+    <div class="header-box" id="external-controls">
+        <h2>2. External Overrides (Force-Feed)</h2>
+        <div class="control-row">
+            <div class="control-group">
+                <label for="audioSelect">Force Audio Track</label>
+                <select id="audioSelect" onchange="forceAudioTrack()">
+                    <option value="">Loading Audio...</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="subSelect">Force Subtitle Track</label>
+                <select id="subSelect" onchange="forceSubTrack()">
+                    <option value="">Loading Subtitles...</option>
+                </select>
+            </div>
         </div>
     </div>
 
@@ -111,6 +156,7 @@
 
 <script>
     let art = null;
+    let globalHls = null; // Store HLS instance globally for our overrides
 
     async function loadStream() {
         const urlInput = document.getElementById('jsonUrl').value.trim();
@@ -135,9 +181,7 @@
 
     function initializePlayer(metadata) {
         if (typeof window.artplayerPluginJassub === 'undefined') {
-            const errorMsg = "Critical Error: artplayerPluginJassub did not load. Please check your network or ad-blocker.";
-            console.error(errorMsg);
-            alert(errorMsg);
+            alert("Critical Error: artplayerPluginJassub did not load.");
             return;
         }
 
@@ -146,133 +190,118 @@
             art = null;
         }
 
-        const hlsUrl = metadata.hls_manifest_url;
+        // Setup External Subtitle Dropdown immediately from JSON
         const subtitles = metadata.ass_subtitles || [];
         const fonts = metadata.fonts || [];
+        const subSelect = document.getElementById('subSelect');
+        subSelect.innerHTML = '';
+        
+        if (subtitles.length > 0) {
+            subtitles.forEach((subUrl, index) => {
+                const match = subUrl.match(/subs_\d+_(.*?)\.ass/i);
+                const name = match ? match[1].replace(/_/g, ' ') : `Subtitle Track ${index + 1}`;
+                const opt = document.createElement('option');
+                opt.value = subUrl;
+                opt.text = name;
+                subSelect.appendChild(opt);
+            });
+        } else {
+            subSelect.innerHTML = '<option value="">No subtitles available</option>';
+            subSelect.disabled = true;
+        }
 
-        const subSelector = subtitles.map((subUrl, index) => {
-            const match = subUrl.match(/subs_\d+_(.*?)\.ass/i);
-            const name = match ? match[1].replace(/_/g, ' ') : `Subtitle Track ${index + 1}`;
-            return {
-                default: index === 0,
-                html: name,
-                url: subUrl
-            };
-        });
+        // Reveal the override panel
+        document.getElementById('external-controls').style.display = 'block';
 
         const artOptions = {
             container: '#player-wrapper',
-            url: hlsUrl,
+            url: metadata.hls_manifest_url,
             type: 'm3u8',
             volume: 0.7,
-            isLive: false,
-            muted: false,
             autoplay: false,
-            pip: true,
-            autoSize: true,
-            autoMini: true,
-            setting: true,
-            loop: false,
-            flip: true,
-            playbackRate: true,
-            aspectRatio: true,
-            fullscreen: true,
-            fullscreenWeb: true,
-            subtitleOffset: false,
-            miniProgressBar: true,
-            mutex: true,
-            backdrop: true,
-            playsInline: true,
-            autoPlayback: true,
-            airplay: true,
-            theme: '#4A90E2',
-            settings: [],
+            setting: false, // Turned off internal settings to avoid conflicts
             customType: {
                 m3u8: function (video, url, artInstance) {
                     if (Hls.isSupported()) {
                         if (artInstance.hls) artInstance.hls.destroy();
                         const hls = new Hls();
+                        globalHls = hls; // Bind to global variable
+                        
                         hls.loadSource(url);
                         hls.attachMedia(video);
                         artInstance.hls = hls;
                         
                         artInstance.on('destroy', () => hls.destroy());
 
-                        // FIXED Issue 2: Moved event trigger from MANIFEST_PARSED to AUDIO_TRACKS_UPDATED 
+                        // Populate External Audio Dropdown once HLS parses the tracks
                         hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function (_, data) {
-                            const audioTracks = data.audioTracks;
-                            // Ensure there are tracks and we haven't already appended the setting
-                            if (audioTracks && audioTracks.length > 1 && !artInstance.audioTracksInitialized) {
-                                artInstance.audioTracksInitialized = true; // Lock to prevent UI duplication
-
-                                const audioSelector = audioTracks.map((track, index) => ({
-                                    html: track.name || track.language || `Audio Track ${index + 1}`,
-                                    audioId: track.id,
-                                    default: track.default || index === hls.audioTrack
-                                }));
-
-                                artInstance.setting.add({
-                                    html: 'Audio Track',
-                                    width: 250,
-                                    tooltip: audioSelector.find(t => t.default)?.html || audioSelector[0].html,
-                                    selector: audioSelector,
-                                    onSelect: function (item) {
-                                        hls.audioTrack = item.audioId;
-                                        return item.html;
-                                    }
+                            const audioSelect = document.getElementById('audioSelect');
+                            audioSelect.innerHTML = '';
+                            
+                            if (data.audioTracks && data.audioTracks.length > 0) {
+                                data.audioTracks.forEach((track, index) => {
+                                    const opt = document.createElement('option');
+                                    opt.value = track.id;
+                                    opt.text = track.name || track.language || `Audio Track ${index + 1}`;
+                                    if (track.default) opt.selected = true;
+                                    audioSelect.appendChild(opt);
                                 });
+                            } else {
+                                audioSelect.innerHTML = '<option value="">No alternative audio</option>';
+                                audioSelect.disabled = true;
                             }
                         });
                     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                         video.src = url;
-                    } else {
-                        artInstance.notice.show = 'Unsupported playback format: m3u8';
                     }
                 }
             }
         };
 
+        // Initialize JASSUB Plugin if subtitles exist
         if (subtitles.length > 0) {
             artOptions.plugins = [
                 window.artplayerPluginJassub({
                     debug: false,
-                    subUrl: subtitles[0], 
+                    subUrl: subtitles[0], // Start with the first one
                     fonts: fonts,         
-                    workerUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.js',
+                    workerUrl: './jassub-worker.js',
                     wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
                 })
             ];
-
-            if (subtitles.length > 1) {
-                artOptions.settings.push({
-                    html: 'Subtitles',
-                    width: 250,
-                    tooltip: subSelector[0].html,
-                    selector: subSelector,
-                    onSelect: function (item) {
-                        const p = art.plugins.artplayerPluginJassub;
-                        let success = false;
-                        
-                        // FIXED Issue 1: Bypass plugin wrappers if needed and drill down to the active JASSUB instance
-                        if (p) {
-                            if (typeof p.switchSubtitle === 'function') { p.switchSubtitle(item.url); success = true; }
-                            else if (typeof p.switch === 'function') { p.switch(item.url); success = true; }
-                            else if (typeof p.setTrackByUrl === 'function') { p.setTrackByUrl(item.url); success = true; }
-                            else if (p.jassub && typeof p.jassub.setTrackByUrl === 'function') { p.jassub.setTrackByUrl(item.url); success = true; }
-                            else if (p.instance && typeof p.instance.setTrackByUrl === 'function') { p.instance.setTrackByUrl(item.url); success = true; }
-                        }
-                        
-                        if (!success) {
-                            console.error("JASSUB UI Track Switcher failed. Check plugin instance structure in console:", p);
-                        }
-                        
-                        return item.html;
-                    }
-                });
-            }
         }
 
         art = new Artplayer(artOptions);
+    }
+
+    // --- BRUTE FORCE EXTERNAL OVERRIDE METHODS ---
+
+    function forceAudioTrack() {
+        if (globalHls) {
+            const audioSelect = document.getElementById('audioSelect');
+            const selectedTrackId = parseInt(audioSelect.value, 10);
+            
+            // Force-feed the HLS instance the new audio track ID
+            globalHls.audioTrack = selectedTrackId;
+            console.log("Forced HLS Audio Track to ID:", selectedTrackId);
+        }
+    }
+
+    function forceSubTrack() {
+        if (art && art.plugins && art.plugins.artplayerPluginJassub) {
+            const subSelect = document.getElementById('subSelect');
+            const selectedUrl = subSelect.value;
+            const p = art.plugins.artplayerPluginJassub;
+            
+            // Fire on all cylinders to guarantee the JASSUB worker receives the new URL
+            if (typeof p.switchSubtitle === 'function') p.switchSubtitle(selectedUrl);
+            else if (typeof p.switch === 'function') p.switch(selectedUrl);
+            else if (typeof p.setTrackByUrl === 'function') p.setTrackByUrl(selectedUrl);
+            else if (p.jassub && typeof p.jassub.setTrackByUrl === 'function') p.jassub.setTrackByUrl(selectedUrl);
+            else if (p.instance && typeof p.instance.setTrackByUrl === 'function') p.instance.setTrackByUrl(selectedUrl);
+            
+            console.log("Forced JASSUB Subtitle Track to URL:", selectedUrl);
+        }
     }
 
     function renderMetadataInfo(data) {
