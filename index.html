@@ -68,7 +68,6 @@
         }
         button:hover { background: #357ABD; }
         
-        /* New External Controls Styling */
         #external-controls {
             display: none;
             background: #111;
@@ -156,7 +155,7 @@
 
 <script>
     let art = null;
-    let globalHls = null; // Store HLS instance globally for our overrides
+    let globalHls = null; 
 
     async function loadStream() {
         const urlInput = document.getElementById('jsonUrl').value.trim();
@@ -190,7 +189,9 @@
             art = null;
         }
 
-        // Setup External Subtitle Dropdown immediately from JSON
+        // Reset global initialization state for the new stream
+        window.audioTracksInitialized = false;
+
         const subtitles = metadata.ass_subtitles || [];
         const fonts = metadata.fonts || [];
         const subSelect = document.getElementById('subSelect');
@@ -210,7 +211,6 @@
             subSelect.disabled = true;
         }
 
-        // Reveal the override panel
         document.getElementById('external-controls').style.display = 'block';
 
         const artOptions = {
@@ -219,13 +219,14 @@
             type: 'm3u8',
             volume: 0.7,
             autoplay: false,
-            setting: false, // Turned off internal settings to avoid conflicts
+            setting: false, 
             customType: {
                 m3u8: function (video, url, artInstance) {
                     if (Hls.isSupported()) {
                         if (artInstance.hls) artInstance.hls.destroy();
+                        
                         const hls = new Hls();
-                        globalHls = hls; // Bind to global variable
+                        globalHls = hls; 
                         
                         hls.loadSource(url);
                         hls.attachMedia(video);
@@ -233,17 +234,26 @@
                         
                         artInstance.on('destroy', () => hls.destroy());
 
-                        // Populate External Audio Dropdown once HLS parses the tracks
                         hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function (_, data) {
+                            if (window.audioTracksInitialized) return; // Prevent loop overrides
+                            
                             const audioSelect = document.getElementById('audioSelect');
                             audioSelect.innerHTML = '';
                             
                             if (data.audioTracks && data.audioTracks.length > 0) {
+                                window.audioTracksInitialized = true;
+                                
                                 data.audioTracks.forEach((track, index) => {
                                     const opt = document.createElement('option');
-                                    opt.value = track.id;
+                                    opt.value = index; // Strictly bind to the array index
                                     opt.text = track.name || track.language || `Audio Track ${index + 1}`;
-                                    if (track.default) opt.selected = true;
+                                    
+                                    // FIXED: Ignore the broken DEFAULT=YES flags from the manifest.
+                                    // Base the UI selection entirely on what HLS actually decided to play.
+                                    if (index === hls.audioTrack) {
+                                        opt.selected = true;
+                                    }
+                                    
                                     audioSelect.appendChild(opt);
                                 });
                             } else {
@@ -258,12 +268,11 @@
             }
         };
 
-        // Initialize JASSUB Plugin if subtitles exist
         if (subtitles.length > 0) {
             artOptions.plugins = [
                 window.artplayerPluginJassub({
                     debug: false,
-                    subUrl: subtitles[0], // Start with the first one
+                    subUrl: subtitles[0], 
                     fonts: fonts,         
                     workerUrl: './jassub-worker.js',
                     wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
@@ -279,11 +288,11 @@
     function forceAudioTrack() {
         if (globalHls) {
             const audioSelect = document.getElementById('audioSelect');
-            const selectedTrackId = parseInt(audioSelect.value, 10);
+            const selectedIndex = parseInt(audioSelect.value, 10);
             
-            // Force-feed the HLS instance the new audio track ID
-            globalHls.audioTrack = selectedTrackId;
-            console.log("Forced HLS Audio Track to ID:", selectedTrackId);
+            // Push the new index to HLS.js. This will immediately trigger a network fetch for the new .m3u8
+            globalHls.audioTrack = selectedIndex;
+            console.log("Forced HLS Audio Track to Index:", selectedIndex);
         }
     }
 
@@ -293,7 +302,6 @@
             const selectedUrl = subSelect.value;
             const p = art.plugins.artplayerPluginJassub;
             
-            // Fire on all cylinders to guarantee the JASSUB worker receives the new URL
             if (typeof p.switchSubtitle === 'function') p.switchSubtitle(selectedUrl);
             else if (typeof p.switch === 'function') p.switch(selectedUrl);
             else if (typeof p.setTrackByUrl === 'function') p.setTrackByUrl(selectedUrl);
