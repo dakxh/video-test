@@ -198,12 +198,21 @@
         subSelect.innerHTML = '';
         
         if (subtitles.length > 0) {
-            subtitles.forEach((subUrl, index) => {
-                const match = subUrl.match(/subs_\d+_(.*?)\.ass/i);
-                const name = match ? match[1].replace(/_/g, ' ') : `Subtitle Track ${index + 1}`;
+            subtitles.forEach((subItem, index) => {
+                const isString = typeof subItem === 'string';
+                const subUrl = isString ? subItem : subItem.url;
+                
+                let name = `Subtitle Track ${index + 1}`;
+                if (!isString && subItem.label) {
+                    name = subItem.label;
+                } else {
+                    const match = subUrl.match(/subs_\d+_(.*?)\.ass/i);
+                    if (match) name = match[1].replace(/_/g, ' ');
+                }
+
                 const opt = document.createElement('option');
                 opt.value = subUrl;
-                opt.text = name;
+                opt.text = decodeURIComponent(name);
                 subSelect.appendChild(opt);
             });
         } else {
@@ -269,10 +278,12 @@
         };
 
         if (subtitles.length > 0) {
+            const firstSubUrl = typeof subtitles[0] === 'string' ? subtitles[0] : subtitles[0].url;
+
             artOptions.plugins = [
                 window.artplayerPluginJassub({
                     debug: false,
-                    subUrl: subtitles[0], 
+                    subUrl: firstSubUrl, 
                     fonts: fonts,         
                     workerUrl: './jassub-worker.js',
                     wasmUrl: 'https://cdn.jsdelivr.net/npm/jassub@latest/dist/jassub-worker.wasm',
@@ -321,8 +332,8 @@
                 <span class="tag">${data.size || 'Unknown Size'}</span>
                 <span class="tag">${data.duration || 'Unknown Duration'}</span>
             </div>
-            <strong>${data.series_title || 'Unknown Series'}</strong> &nbsp;&mdash;&nbsp; 
-            Season ${String(data.season_number).padStart(2, '0')} Episode ${String(data.episode_number).padStart(2, '0')}: <em>${data.episode_name || 'N/A'}</em><br>
+            <strong>${data.series_title || data.title || 'Unknown Series'}</strong> &nbsp;&mdash;&nbsp; 
+            Season ${String(data.season_number || 1).padStart(2, '0')} Episode ${String(data.episode_number || 1).padStart(2, '0')}: <em>${data.episode_name || data.movie_title || 'N/A'}</em><br>
             <div style="margin-top: 5px; color: #888; font-size: 0.85rem;">
                 Original File: ${data.original_filename || 'N/A'}
             </div>
