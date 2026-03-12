@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artplayer | Advanced External Override Tester</title>
+    <title>Artplayer | Advanced External Override Tester (Buckets Optimized)</title>
 
     <script src="https://cdn.jsdelivr.net/npm/artplayer@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -126,7 +126,7 @@
         <h2>1. Stream Metadata Source</h2>
         <div class="input-group">
             <input type="text" id="jsonUrl" placeholder="Enter JSON Metadata URL..." 
-                   value="https://huggingface.co/datasets/Gravatar44/anime/resolve/main/Teasing.Master.Takagi-San.1080p/Season.03/Episode.11/metadata.json">
+                   value="https://huggingface.co/buckets/nookaharsha/anime/resolve/Chainsaw.Man.The.Movie.Reze.Arc.1080p.SDR/metadata.json">
             <button onclick="loadStream()">Load Player</button>
         </div>
     </div>
@@ -157,17 +157,46 @@
     let art = null;
     let globalHls = null; 
 
+    // ---- HUGGINGFACE STORAGE BUCKETS URL PATCHER -----
+    function sanitizeHfUrl(u) {
+        if (!u || typeof u !== 'string') return u;
+        // 1. Clean out ?download=true params that sever XHR / direct-fetch CORS protocols gracefully 
+        let rawUrl = u.replace(/[?&]download=true/g, '');
+        
+        // 2. Automatically transform Hub UI view paths to raw file resolving HTTP endpoints for object containers
+        // Bypasses lookaheads explicitly looking if `resolve/` is missing correctly after `repo` blocks
+        const hfBucketRegex = /^(https?:\/\/huggingface\.co\/buckets\/[^/]+\/[^/]+)\/(?!resolve\/)(.*)$/i;
+        return rawUrl.replace(hfBucketRegex, '$1/resolve/$2');
+    }
+    // ----------------------------------------------------
+
     async function loadStream() {
-        const urlInput = document.getElementById('jsonUrl').value.trim();
+        let urlInput = document.getElementById('jsonUrl').value.trim();
         if (!urlInput) {
             alert('Please enter a valid URL.');
             return;
         }
+        
+        // Pre-sanitize metadata API endpoint dynamically
+        urlInput = sanitizeHfUrl(urlInput);
 
         try {
             const response = await fetch(urlInput);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const metadata = await response.json();
+            
+            let metadata = await response.json();
+            
+            // Clean previously recorded legacy JSON metadata linking issues safely on fetch
+            if (metadata.hls_manifest_url) metadata.hls_manifest_url = sanitizeHfUrl(metadata.hls_manifest_url);
+            if (metadata.fonts) {
+                metadata.fonts = metadata.fonts.map(sanitizeHfUrl);
+            }
+            if (metadata.ass_subtitles) {
+                metadata.ass_subtitles = metadata.ass_subtitles.map(sub => {
+                    const mappedUrl = sanitizeHfUrl(typeof sub === 'string' ? sub : sub.url);
+                    return typeof sub === 'string' ? mappedUrl : { ...sub, url: mappedUrl };
+                });
+            }
             
             initializePlayer(metadata);
             renderMetadataInfo(metadata);
@@ -192,8 +221,8 @@
         // Reset global initialization state for the new stream
         window.audioTracksInitialized = false;
 
-        const subtitles = metadata.ass_subtitles || [];
-        const fonts = metadata.fonts || [];
+        const subtitles = metadata.ass_subtitles ||[];
+        const fonts = metadata.fonts ||[];
         const subSelect = document.getElementById('subSelect');
         subSelect.innerHTML = '';
         
@@ -233,10 +262,21 @@
                 m3u8: function (video, url, artInstance) {
                     if (Hls.isSupported()) {
                         if (artInstance.hls) artInstance.hls.destroy();
+
+                        // -- HLS DYNAMIC IN-TRANSIT NETWORK URL SCRUBBER (Solves hardcoded .ts CORS segment redirects) -- 
+                        class PatchedHlsLoader extends Hls.DefaultConfig.loader {
+                            load(context, config, callbacks) {
+                                if (context.url) context.url = sanitizeHfUrl(context.url);
+                                super.load(context, config, callbacks);
+                            }
+                        }
                         
-                        const hls = new Hls();
+                        const hls = new Hls({
+                            loader: PatchedHlsLoader
+                        });
                         globalHls = hls; 
-                        
+                        // --------------------------------------------------------------------------------------------------
+
                         hls.loadSource(url);
                         hls.attachMedia(video);
                         artInstance.hls = hls;
@@ -257,8 +297,6 @@
                                     opt.value = index; // Strictly bind to the array index
                                     opt.text = track.name || track.language || `Audio Track ${index + 1}`;
                                     
-                                    // FIXED: Ignore the broken DEFAULT=YES flags from the manifest.
-                                    // Base the UI selection entirely on what HLS actually decided to play.
                                     if (index === hls.audioTrack) {
                                         opt.selected = true;
                                     }
@@ -280,7 +318,7 @@
         if (subtitles.length > 0) {
             const firstSubUrl = typeof subtitles[0] === 'string' ? subtitles[0] : subtitles[0].url;
 
-            artOptions.plugins = [
+            artOptions.plugins =[
                 window.artplayerPluginJassub({
                     debug: false,
                     subUrl: firstSubUrl, 
@@ -294,14 +332,11 @@
         art = new Artplayer(artOptions);
     }
 
-    // --- BRUTE FORCE EXTERNAL OVERRIDE METHODS ---
-
     function forceAudioTrack() {
         if (globalHls) {
             const audioSelect = document.getElementById('audioSelect');
             const selectedIndex = parseInt(audioSelect.value, 10);
             
-            // Push the new index to HLS.js. This will immediately trigger a network fetch for the new .m3u8
             globalHls.audioTrack = selectedIndex;
             console.log("Forced HLS Audio Track to Index:", selectedIndex);
         }
