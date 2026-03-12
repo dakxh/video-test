@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Artplayer | Advanced External Override Tester (Buckets Optimized)</title>
+    <title>Artplayer | Advanced External Override Tester (CORS Fix)</title>
 
     <script src="https://cdn.jsdelivr.net/npm/artplayer@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -157,53 +157,63 @@
     let art = null;
     let globalHls = null; 
 
-    // ---- HUGGINGFACE STORAGE BUCKETS URL PATCHER -----
-    function sanitizeHfUrl(u) {
+    // --- HF MISSING CORS REDIRECT BUCKET PROXY FIX (Replaces broken direct headers natively) ---
+    const CORS_PROXY_BASE = "https://corsproxy.io/?url=";
+
+    function generateProperResolvedHfPath(u) {
         if (!u || typeof u !== 'string') return u;
-        // 1. Clean out ?download=true params that sever XHR / direct-fetch CORS protocols gracefully 
-        let rawUrl = u.replace(/[?&]download=true/g, '');
-        
-        // 2. Automatically transform Hub UI view paths to raw file resolving HTTP endpoints for object containers
-        // Bypasses lookaheads explicitly looking if `resolve/` is missing correctly after `repo` blocks
-        const hfBucketRegex = /^(https?:\/\/huggingface\.co\/buckets\/[^/]+\/[^/]+)\/(?!resolve\/)(.*)$/i;
-        return rawUrl.replace(hfBucketRegex, '$1/resolve/$2');
+        let sanitized = u.replace(/[?&]download=true/g, '');
+        // Transforms base visual routes silently
+        return sanitized.replace(/^(https?:\/\/huggingface\.co\/buckets\/[^/]+\/[^/]+)\/(?!resolve\/)(.*)$/i, '$1/resolve/$2');
     }
-    // ----------------------------------------------------
+
+    function ensureCorsHeaderProxy(rawAbsoluteUrl) {
+        // Enforces wildcard CORS access explicitly to bypass blocked Buckets API natively 
+        const urlToFetch = generateProperResolvedHfPath(rawAbsoluteUrl);
+        if (urlToFetch.includes('huggingface.co/buckets/')) {
+            return CORS_PROXY_BASE + encodeURIComponent(urlToFetch);
+        }
+        return urlToFetch;
+    }
+    // -----------------------------------------------------------------------------------------
 
     async function loadStream() {
-        let urlInput = document.getElementById('jsonUrl').value.trim();
-        if (!urlInput) {
+        let inputUrl = document.getElementById('jsonUrl').value.trim();
+        if (!inputUrl) {
             alert('Please enter a valid URL.');
             return;
         }
-        
-        // Pre-sanitize metadata API endpoint dynamically
-        urlInput = sanitizeHfUrl(urlInput);
 
         try {
-            const response = await fetch(urlInput);
+            // Apply CORS Override proxy manually to main payload fetches
+            const safeMetadataApiTarget = ensureCorsHeaderProxy(inputUrl);
+
+            const response = await fetch(safeMetadataApiTarget);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             
             let metadata = await response.json();
             
-            // Clean previously recorded legacy JSON metadata linking issues safely on fetch
-            if (metadata.hls_manifest_url) metadata.hls_manifest_url = sanitizeHfUrl(metadata.hls_manifest_url);
+            // Sanitize metadata variables natively inside RAM state
+            if (metadata.hls_manifest_url) metadata.hls_manifest_url = generateProperResolvedHfPath(metadata.hls_manifest_url);
+            
+            // Subtitle tracks heavily break under missing CORS too! Let's ensure proxy wraps JS font requests securely
             if (metadata.fonts) {
-                metadata.fonts = metadata.fonts.map(sanitizeHfUrl);
+                metadata.fonts = metadata.fonts.map(f => ensureCorsHeaderProxy(f));
             }
             if (metadata.ass_subtitles) {
                 metadata.ass_subtitles = metadata.ass_subtitles.map(sub => {
-                    const mappedUrl = sanitizeHfUrl(typeof sub === 'string' ? sub : sub.url);
-                    return typeof sub === 'string' ? mappedUrl : { ...sub, url: mappedUrl };
+                    const rawTargetUrl = generateProperResolvedHfPath(typeof sub === 'string' ? sub : sub.url);
+                    const safeProxiedSubURL = ensureCorsHeaderProxy(rawTargetUrl);
+                    return typeof sub === 'string' ? safeProxiedSubURL : { ...sub, url: safeProxiedSubURL };
                 });
             }
-            
+
             initializePlayer(metadata);
             renderMetadataInfo(metadata);
             
         } catch (error) {
             console.error("Failed to load metadata:", error);
-            alert(`Error loading metadata: ${error.message}`);
+            alert(`Error loading metadata: ${error.message} - Confirm link exists natively or CORS proxy hasn't rotated limit thresholds.`);
         }
     }
 
@@ -218,27 +228,22 @@
             art = null;
         }
 
-        // Reset global initialization state for the new stream
         window.audioTracksInitialized = false;
 
-        const subtitles = metadata.ass_subtitles ||[];
+        const subtitles = metadata.ass_subtitles || [];
         const fonts = metadata.fonts ||[];
         const subSelect = document.getElementById('subSelect');
         subSelect.innerHTML = '';
         
         if (subtitles.length > 0) {
             subtitles.forEach((subItem, index) => {
-                const isString = typeof subItem === 'string';
-                const subUrl = isString ? subItem : subItem.url;
-                
+                const subUrl = typeof subItem === 'string' ? subItem : subItem.url;
                 let name = `Subtitle Track ${index + 1}`;
-                if (!isString && subItem.label) {
+                
+                if (typeof subItem !== 'string' && subItem.label) {
                     name = subItem.label;
-                } else {
-                    const match = subUrl.match(/subs_\d+_(.*?)\.ass/i);
-                    if (match) name = match[1].replace(/_/g, ' ');
                 }
-
+                
                 const opt = document.createElement('option');
                 opt.value = subUrl;
                 opt.text = decodeURIComponent(name);
@@ -253,7 +258,7 @@
 
         const artOptions = {
             container: '#player-wrapper',
-            url: metadata.hls_manifest_url,
+            url: metadata.hls_manifest_url, 
             type: 'm3u8',
             volume: 0.7,
             autoplay: false,
@@ -263,19 +268,23 @@
                     if (Hls.isSupported()) {
                         if (artInstance.hls) artInstance.hls.destroy();
 
-                        // -- HLS DYNAMIC IN-TRANSIT NETWORK URL SCRUBBER (Solves hardcoded .ts CORS segment redirects) -- 
-                        class PatchedHlsLoader extends Hls.DefaultConfig.loader {
+                        // --- BUCKET CORS BYPASS NETWORK LEVEL LOADER REVERSE ENGINEERED ----
+                        class HfBucketsProxyLoader extends Hls.DefaultConfig.loader {
                             load(context, config, callbacks) {
-                                if (context.url) context.url = sanitizeHfUrl(context.url);
+                                if (context.url) {
+                                    // HLS computes exact relative string links itself to Absolute string structures natively 
+                                    // Our custom XHR Loader grabs its output internally and shunts only actual Outbound API routing through the headers! 
+                                    context.url = ensureCorsHeaderProxy(context.url);
+                                }
                                 super.load(context, config, callbacks);
                             }
                         }
                         
                         const hls = new Hls({
-                            loader: PatchedHlsLoader
+                            loader: HfBucketsProxyLoader
                         });
                         globalHls = hls; 
-                        // --------------------------------------------------------------------------------------------------
+                        // -------------------------------------------------------------------
 
                         hls.loadSource(url);
                         hls.attachMedia(video);
@@ -284,23 +293,17 @@
                         artInstance.on('destroy', () => hls.destroy());
 
                         hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, function (_, data) {
-                            if (window.audioTracksInitialized) return; // Prevent loop overrides
-                            
+                            if (window.audioTracksInitialized) return; 
                             const audioSelect = document.getElementById('audioSelect');
                             audioSelect.innerHTML = '';
                             
                             if (data.audioTracks && data.audioTracks.length > 0) {
                                 window.audioTracksInitialized = true;
-                                
                                 data.audioTracks.forEach((track, index) => {
                                     const opt = document.createElement('option');
-                                    opt.value = index; // Strictly bind to the array index
+                                    opt.value = index; 
                                     opt.text = track.name || track.language || `Audio Track ${index + 1}`;
-                                    
-                                    if (index === hls.audioTrack) {
-                                        opt.selected = true;
-                                    }
-                                    
+                                    if (index === hls.audioTrack) opt.selected = true;
                                     audioSelect.appendChild(opt);
                                 });
                             } else {
@@ -309,7 +312,7 @@
                             }
                         });
                     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                        video.src = url;
+                        video.src = url; // Fallback Apple generic payload systems. Usually bypass standard Web browser limits uniquely on iOS safari natively
                     }
                 }
             }
@@ -336,9 +339,7 @@
         if (globalHls) {
             const audioSelect = document.getElementById('audioSelect');
             const selectedIndex = parseInt(audioSelect.value, 10);
-            
             globalHls.audioTrack = selectedIndex;
-            console.log("Forced HLS Audio Track to Index:", selectedIndex);
         }
     }
 
@@ -353,8 +354,6 @@
             else if (typeof p.setTrackByUrl === 'function') p.setTrackByUrl(selectedUrl);
             else if (p.jassub && typeof p.jassub.setTrackByUrl === 'function') p.jassub.setTrackByUrl(selectedUrl);
             else if (p.instance && typeof p.instance.setTrackByUrl === 'function') p.instance.setTrackByUrl(selectedUrl);
-            
-            console.log("Forced JASSUB Subtitle Track to URL:", selectedUrl);
         }
     }
 
